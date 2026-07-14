@@ -43,6 +43,28 @@ class WindowInfo:
     ex_style: int
 
 
+class PetPresenceDebouncer:
+    """Keep the pet present through brief, consecutive detection misses."""
+
+    def __init__(self, miss_threshold: int = 10) -> None:
+        if miss_threshold < 1:
+            raise ValueError("miss_threshold must be at least 1")
+        self.miss_threshold = miss_threshold
+        self.consecutive_misses = 0
+        self.present = False
+
+    def observe(self, found: bool) -> bool:
+        if found:
+            self.consecutive_misses = 0
+            self.present = True
+        elif self.present:
+            self.consecutive_misses += 1
+            if self.consecutive_misses >= self.miss_threshold:
+                self.consecutive_misses = 0
+                self.present = False
+        return self.present
+
+
 def pet_candidate_score(window: WindowInfo) -> int | None:
     """Score the special transparent ChatGPT pet overlay, excluding the main app window."""
 

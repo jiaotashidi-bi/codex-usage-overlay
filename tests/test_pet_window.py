@@ -7,11 +7,44 @@ from xiexie_usage_overlay.pet_window import (
     WS_EX_TOOLWINDOW,
     WS_EX_TOPMOST,
     WS_EX_TRANSPARENT,
+    PetPresenceDebouncer,
     Rect,
     WindowInfo,
     calculate_follow_position,
     pet_candidate_score,
 )
+
+
+class PetPresenceDebouncerTests(unittest.TestCase):
+    def test_brief_detection_misses_keep_pet_present(self) -> None:
+        tracker = PetPresenceDebouncer(miss_threshold=3)
+
+        self.assertTrue(tracker.observe(True))
+        self.assertTrue(tracker.observe(False))
+        self.assertTrue(tracker.observe(False))
+        self.assertEqual(tracker.consecutive_misses, 2)
+
+    def test_consecutive_misses_eventually_hide_pet(self) -> None:
+        tracker = PetPresenceDebouncer(miss_threshold=3)
+
+        tracker.observe(True)
+        tracker.observe(False)
+        tracker.observe(False)
+        self.assertFalse(tracker.observe(False))
+
+    def test_successful_detection_resets_miss_count(self) -> None:
+        tracker = PetPresenceDebouncer(miss_threshold=2)
+
+        tracker.observe(True)
+        tracker.observe(False)
+        self.assertTrue(tracker.observe(True))
+        self.assertEqual(tracker.consecutive_misses, 0)
+        self.assertTrue(tracker.observe(False))
+
+    def test_pet_starts_hidden_until_detected(self) -> None:
+        tracker = PetPresenceDebouncer(miss_threshold=3)
+
+        self.assertFalse(tracker.observe(False))
 
 
 class PetWindowDetectionTests(unittest.TestCase):
@@ -86,4 +119,3 @@ class FollowPositionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

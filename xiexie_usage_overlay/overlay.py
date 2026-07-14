@@ -5,7 +5,7 @@ import queue
 import tkinter as tk
 from typing import Protocol
 
-from .pet_window import PetWindowLocator, WindowInfo, calculate_follow_position
+from .pet_window import PetPresenceDebouncer, PetWindowLocator, WindowInfo, calculate_follow_position
 from .service import ServiceEvent
 from .settings import Settings
 from .usage import UsageSnapshot
@@ -21,6 +21,7 @@ class OverlayService(Protocol):
 
 class UsageOverlay:
     WIDTH = 220
+    PET_MISS_THRESHOLD = 10
     TRANSPARENT = "#010203"
     BODY = "#FFF9E9"
     BODY_BORDER = "#D7E2EF"
@@ -65,6 +66,7 @@ class UsageOverlay:
         self._drag_origin: tuple[int, int, int, int] | None = None
         self._closing = False
         self._pet_locator = PetWindowLocator() if PetWindowLocator.supported else None
+        self._pet_presence = PetPresenceDebouncer(self.PET_MISS_THRESHOLD)
         self._pet_window: WindowInfo | None = None
         self._pet_shown = self._pet_locator is None
         self._follow_base: tuple[int, int] | None = None
@@ -166,7 +168,8 @@ class UsageOverlay:
             return
 
         pet = self._pet_locator.find()
-        if pet is None:
+        pet_present = self._pet_presence.observe(pet is not None)
+        if pet is None and not pet_present:
             self._pet_window = None
             self._follow_base = None
             self._drag_origin = None
@@ -174,7 +177,7 @@ class UsageOverlay:
                 logging.getLogger(__name__).info("Codex pet hidden; hiding usage overlay")
                 self.root.withdraw()
                 self._pet_shown = False
-        else:
+        elif pet is not None:
             self._pet_window = pet
             work_area = self._pet_locator.work_area(pet.handle)
             overlay_height = round(self._height * self._scale)
