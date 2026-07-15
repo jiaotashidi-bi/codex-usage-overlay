@@ -24,7 +24,7 @@ class OverlayService(Protocol):
 
 class UsageOverlay:
     WIDTH = 190
-    UI_SCALE = 1.25
+    UI_SCALE = 1.36
     PET_MISS_THRESHOLD = 10
     TRANSPARENT = "#010203"
     BODY = "#FFF9E9"
