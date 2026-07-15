@@ -363,10 +363,11 @@ class UsageOverlay:
         )
 
         y = 35
+        row_step = self._row_step(len(rows))
         if rows:
             for row in rows:
                 self._draw_limit_row(y, row.label, row.window.remaining_percent, row.window.reset_text())
-                y += 34
+                y += row_step
         else:
             self.canvas.create_text(
                 12,
@@ -417,6 +418,10 @@ class UsageOverlay:
         if row_count >= 2:
             return 230
         return 150
+
+    @staticmethod
+    def _row_step(row_count: int) -> int:
+        return 40 if row_count >= 2 else 34
 
     def _draw_limit_row(self, y: int, label: str, remaining: int, reset_text: str) -> None:
         self.canvas.create_text(

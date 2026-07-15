@@ -35,6 +35,10 @@ class OverlayRecoveryTests(unittest.TestCase):
         self.assertEqual(UsageOverlay._snapshot_pixel_height(2, False), 230)
         self.assertEqual(UsageOverlay._snapshot_pixel_height(2, True), 250)
 
+    def test_two_rows_have_additional_vertical_spacing(self) -> None:
+        self.assertEqual(UsageOverlay._row_step(1), 34)
+        self.assertEqual(UsageOverlay._row_step(2), 40)
+
 
 if __name__ == "__main__":
     unittest.main()
