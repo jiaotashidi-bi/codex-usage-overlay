@@ -47,7 +47,9 @@ class UsageOverlay:
         is_windows = self.root.tk.call("tk", "windowingsystem") == "win32"
         if is_windows:
             self.root.wm_attributes("-transparentcolor", self.TRANSPARENT)
-        self._scale = max(1.0, self.root.winfo_fpixels("1i") / 96.0) if is_windows else 1.0
+        # Tk canvas coordinates are already physical pixels in this DPI-aware process.
+        # Applying the monitor DPI factor again made the bubble nearly twice as large.
+        self._scale = 1.0
         self._pixel_width = round(self.WIDTH * self._scale)
 
         self.canvas = tk.Canvas(
@@ -257,14 +259,14 @@ class UsageOverlay:
             anchor="w",
             text="xiexie 余量",
             fill=self.INK,
-            font=("Microsoft YaHei UI", 8, "bold"),
+            font=("Microsoft YaHei UI", 5, "bold"),
         )
         self.canvas.create_text(
             self.WIDTH - 42,
             17.5,
             text="↻",
             fill=self.BLUE,
-            font=("Segoe UI Symbol", 9, "bold"),
+            font=("Segoe UI Symbol", 7, "bold"),
             tags=("refresh",),
         )
         self.canvas.create_text(
@@ -272,7 +274,7 @@ class UsageOverlay:
             17.5,
             text="×",
             fill=self.MUTED,
-            font=("Segoe UI", 10),
+            font=("Segoe UI", 8),
             tags=("close",),
         )
         return body_bottom
@@ -285,7 +287,7 @@ class UsageOverlay:
             anchor="w",
             text=message,
             fill=self.INK,
-            font=("Microsoft YaHei UI", 6),
+            font=("Microsoft YaHei UI", 5),
         )
         self.canvas.create_text(
             12,
@@ -305,7 +307,7 @@ class UsageOverlay:
             anchor="w",
             text="暂时读不到余量。",
             fill=self.INK,
-            font=("Microsoft YaHei UI", 7, "bold"),
+            font=("Microsoft YaHei UI", 6, "bold"),
         )
         short = self._short_error(message)
         self.canvas.create_text(
@@ -315,7 +317,7 @@ class UsageOverlay:
             width=(self.WIDTH - 34) * self._scale,
             text=short,
             fill=self.MUTED,
-            font=("Microsoft YaHei UI", 6),
+            font=("Microsoft YaHei UI", 5),
         )
         self.canvas.create_text(
             12,
@@ -323,7 +325,7 @@ class UsageOverlay:
             anchor="w",
             text="会自动重试，也可双击刷新。",
             fill=self.CORAL,
-            font=("Microsoft YaHei UI", 6, "bold"),
+            font=("Microsoft YaHei UI", 5, "bold"),
         )
         self._finish_drawing()
 
@@ -344,8 +346,8 @@ class UsageOverlay:
         self._draw_chrome(height, status_color)
 
         pill_text = snapshot.plan_type[:12]
-        pill_width = max(44, 12 + len(pill_text) * 7)
-        pill_x2 = self.WIDTH - 52
+        pill_width = max(34, 10 + len(pill_text) * 5)
+        pill_x2 = self.WIDTH - 53
         pill_x1 = pill_x2 - pill_width
         self._rounded_rectangle(pill_x1, 11, pill_x2, 24, 7, fill=self.BLUE_SOFT, outline="")
         self.canvas.create_text(
@@ -353,7 +355,7 @@ class UsageOverlay:
             17.5,
             text=pill_text,
             fill=self.BLUE,
-            font=("Segoe UI", 6, "bold"),
+            font=("Segoe UI", 5, "bold"),
         )
 
         y = 35
@@ -388,7 +390,7 @@ class UsageOverlay:
             anchor="w",
             text=personality,
             fill=status_color,
-            font=("Microsoft YaHei UI", 6, "bold"),
+            font=("Microsoft YaHei UI", 5, "bold"),
         )
         y += 16
 
@@ -411,7 +413,7 @@ class UsageOverlay:
             anchor="w",
             text=label,
             fill=self.INK,
-            font=("Microsoft YaHei UI", 7, "bold"),
+            font=("Microsoft YaHei UI", 6, "bold"),
         )
         self.canvas.create_text(
             self.WIDTH - 22,
@@ -419,7 +421,7 @@ class UsageOverlay:
             anchor="e",
             text=f"{remaining}%",
             fill=self.INK,
-            font=("Microsoft YaHei UI", 7, "bold"),
+            font=("Microsoft YaHei UI", 6, "bold"),
         )
 
         x1, x2 = 12, self.WIDTH - 22

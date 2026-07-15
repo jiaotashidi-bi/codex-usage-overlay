@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
-CURRENT_LAYOUT_VERSION = 2
+CURRENT_LAYOUT_VERSION = 3
 
 
 def app_data_dir() -> Path:

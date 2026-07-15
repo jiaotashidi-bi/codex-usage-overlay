@@ -23,7 +23,7 @@ class SettingsTests(unittest.TestCase):
                         "warning_threshold": None,
                         "follow_offset_x": "12",
                         "follow_offset_y": True,
-                        "layout_version": 2,
+                        "layout_version": 3,
                     }
                 ),
                 encoding="utf-8",
@@ -62,7 +62,7 @@ class SettingsTests(unittest.TestCase):
             with mock.patch("xiexie_usage_overlay.settings.app_data_dir", return_value=root):
                 settings = Settings.load()
 
-        self.assertEqual(settings.layout_version, 2)
+        self.assertEqual(settings.layout_version, 3)
         self.assertEqual(settings.follow_offset_x, 0)
         self.assertEqual(settings.follow_offset_y, 0)
 

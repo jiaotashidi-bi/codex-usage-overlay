@@ -139,8 +139,8 @@ class FollowPositionTests(unittest.TestCase):
             work_area=Rect(0, 0, 3072, 1728),
         )
         self.assertEqual(target, base)
-        self.assertAlmostEqual(target[0] + 760 + 24, 2515, delta=2)
-        self.assertAlmostEqual(target[1] + 177, 1293, delta=2)
+        self.assertAlmostEqual(target[0] + 760 + 24, 2629, delta=2)
+        self.assertAlmostEqual(target[1] + 177, 1446, delta=2)
 
     def test_position_is_clamped_to_monitor(self) -> None:
         target, _base = calculate_follow_position(

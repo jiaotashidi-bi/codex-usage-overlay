@@ -115,8 +115,8 @@ def calculate_follow_position(
 
     # The character occupies the lower-right part of the transparent pet host.
     # Anchor the bubble's right-side pointer near her left shoulder.
-    pet_anchor_x = pet_rect.right - round(pet_rect.width * 0.470)
-    pet_anchor_y = pet_rect.bottom - round(pet_rect.height * 0.530)
+    pet_anchor_x = pet_rect.right - round(pet_rect.width * 0.310)
+    pet_anchor_y = pet_rect.bottom - round(pet_rect.height * 0.290)
     base_x = pet_anchor_x - overlay_width - gap
     base_y = pet_anchor_y - pointer_offset_y
 
