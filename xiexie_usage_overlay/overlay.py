@@ -24,7 +24,8 @@ class OverlayService(Protocol):
 
 class UsageOverlay:
     WIDTH = 190
-    UI_SCALE = 1.36
+    UI_SCALE_X = 1.36
+    UI_SCALE_Y = 150 / 89
     PET_MISS_THRESHOLD = 10
     TRANSPARENT = "#010203"
     BODY = "#FFF9E9"
@@ -48,15 +49,16 @@ class UsageOverlay:
         is_windows = self.root.tk.call("tk", "windowingsystem") == "win32"
         if is_windows:
             self.root.wm_attributes("-transparentcolor", self.TRANSPARENT)
-        # This is a small, deliberate design scale. It must stay independent from
-        # the monitor DPI, which Tk already applies for this DPI-aware process.
-        self._scale = self.UI_SCALE
-        self._pixel_width = round(self.WIDTH * self._scale)
+        # These are deliberate design scales and stay independent from monitor DPI,
+        # which Tk already applies for this DPI-aware process.
+        self._scale_x = self.UI_SCALE_X
+        self._scale_y = self.UI_SCALE_Y
+        self._pixel_width = round(self.WIDTH * self._scale_x)
 
         self.canvas = tk.Canvas(
             self.root,
             width=self._pixel_width,
-            height=round(89 * self._scale),
+            height=round(89 * self._scale_y),
             bg=self.TRANSPARENT,
             bd=0,
             highlightthickness=0,
@@ -119,12 +121,12 @@ class UsageOverlay:
         self.root.update_idletasks()
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
-        pixel_height = round(self._height * self._scale)
-        x = self.settings.x if self.settings.x is not None else screen_width - self._pixel_width - round(36 * self._scale)
+        pixel_height = round(self._height * self._scale_y)
+        x = self.settings.x if self.settings.x is not None else screen_width - self._pixel_width - round(36 * self._scale_x)
         y = (
             self.settings.y
             if self.settings.y is not None
-            else screen_height - pixel_height - round(260 * self._scale)
+            else screen_height - pixel_height - round(260 * self._scale_y)
         )
         x = max(0, min(x, screen_width - self._pixel_width))
         y = max(0, min(y, screen_height - pixel_height))
@@ -135,8 +137,8 @@ class UsageOverlay:
             return
         self.root.update_idletasks()
         x = self.root.winfo_x()
-        old_pixel_height = round(self._height * self._scale)
-        new_pixel_height = round(height * self._scale)
+        old_pixel_height = round(self._height * self._scale_y)
+        new_pixel_height = round(height * self._scale_y)
         y = self.root.winfo_y() + old_pixel_height - new_pixel_height
         self._height = height
         self.canvas.configure(height=new_pixel_height)
@@ -201,9 +203,9 @@ class UsageOverlay:
         elif pet is not None:
             self._pet_window = pet
             work_area = self._pet_locator.work_area(pet.handle)
-            overlay_height = round(self._height * self._scale)
-            pointer_offset_y = round(self._height * 0.50 * self._scale)
-            gap = round(8 * self._scale)
+            overlay_height = round(self._height * self._scale_y)
+            pointer_offset_y = round(self._height * 0.50 * self._scale_y)
+            gap = round(8 * self._scale_x)
             target, base = calculate_follow_position(
                 pet.rect,
                 self._pixel_width,
@@ -315,7 +317,7 @@ class UsageOverlay:
             12,
             53,
             anchor="nw",
-            width=(self.WIDTH - 34) * self._scale,
+            width=(self.WIDTH - 34) * self._scale_x,
             text=short,
             fill=self.MUTED,
             font=("Microsoft YaHei UI", 6),
@@ -471,8 +473,8 @@ class UsageOverlay:
         return self.canvas.create_polygon(points, smooth=True, splinesteps=24, **kwargs)
 
     def _finish_drawing(self) -> None:
-        if self._scale != 1.0:
-            self.canvas.scale("all", 0, 0, self._scale, self._scale)
+        if self._scale_x != 1.0 or self._scale_y != 1.0:
+            self.canvas.scale("all", 0, 0, self._scale_x, self._scale_y)
 
     def _start_drag(self, event) -> None:
         current = self.canvas.gettags("current")
