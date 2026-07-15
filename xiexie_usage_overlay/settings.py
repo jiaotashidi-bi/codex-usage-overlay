@@ -6,6 +6,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
+CURRENT_LAYOUT_VERSION = 2
+
+
 def app_data_dir() -> Path:
     if os.name == "nt" and os.environ.get("LOCALAPPDATA"):
         root = Path(os.environ["LOCALAPPDATA"])
@@ -41,6 +44,7 @@ class Settings:
     warning_threshold: int = 20
     follow_offset_x: int = 0
     follow_offset_y: int = 0
+    layout_version: int = CURRENT_LAYOUT_VERSION
 
     @classmethod
     def load(cls) -> "Settings":
@@ -51,7 +55,10 @@ class Settings:
             return cls()
         if not isinstance(data, dict):
             return cls()
-        return cls(
+        stored_layout_version = _bounded_int(
+            data.get("layout_version", 1), 1, 1, CURRENT_LAYOUT_VERSION
+        )
+        settings = cls(
             x=_optional_int(data.get("x")),
             y=_optional_int(data.get("y")),
             refresh_seconds=_bounded_int(data.get("refresh_seconds", 60), 60, 30, 900),
@@ -59,7 +66,12 @@ class Settings:
             warning_threshold=_bounded_int(data.get("warning_threshold", 20), 20, 1, 50),
             follow_offset_x=_bounded_int(data.get("follow_offset_x", 0), 0, -20_000, 20_000),
             follow_offset_y=_bounded_int(data.get("follow_offset_y", 0), 0, -20_000, 20_000),
+            layout_version=CURRENT_LAYOUT_VERSION,
         )
+        if stored_layout_version < CURRENT_LAYOUT_VERSION:
+            settings.follow_offset_x = 0
+            settings.follow_offset_y = 0
+        return settings
 
     def save(self) -> None:
         directory = app_data_dir()

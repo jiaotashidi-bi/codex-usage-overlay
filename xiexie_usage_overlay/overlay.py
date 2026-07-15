@@ -23,7 +23,7 @@ class OverlayService(Protocol):
 
 
 class UsageOverlay:
-    WIDTH = 220
+    WIDTH = 190
     PET_MISS_THRESHOLD = 10
     TRANSPARENT = "#010203"
     BODY = "#FFF9E9"
@@ -53,7 +53,7 @@ class UsageOverlay:
         self.canvas = tk.Canvas(
             self.root,
             width=self._pixel_width,
-            height=round(108 * self._scale),
+            height=round(89 * self._scale),
             bg=self.TRANSPARENT,
             bd=0,
             highlightthickness=0,
@@ -65,7 +65,7 @@ class UsageOverlay:
         self._snapshot: UsageSnapshot | None = None
         self._status = "loading"
         self._error = ""
-        self._height = 108
+        self._height = 89
         self._drag_origin: tuple[int, int, int, int] | None = None
         self._closing = False
         self._pet_locator = PetWindowLocator() if PetWindowLocator.supported else None
@@ -199,12 +199,14 @@ class UsageOverlay:
             self._pet_window = pet
             work_area = self._pet_locator.work_area(pet.handle)
             overlay_height = round(self._height * self._scale)
-            tail_offset = round((self.WIDTH - 91) * self._scale)
+            pointer_offset_y = round(self._height * 0.50 * self._scale)
+            gap = round(8 * self._scale)
             target, base = calculate_follow_position(
                 pet.rect,
                 self._pixel_width,
                 overlay_height,
-                tail_offset,
+                pointer_offset_y,
+                gap,
                 work_area,
                 self.settings.follow_offset_x,
                 self.settings.follow_offset_y,
@@ -232,60 +234,62 @@ class UsageOverlay:
     def _draw_chrome(self, height: int, status_color: str) -> int:
         self._set_height(height)
         self.canvas.delete("all")
-        body_bottom = height - 16
-        self._rounded_rectangle(4, 4, self.WIDTH - 4, body_bottom, 18, fill=self.BODY, outline=self.BODY_BORDER)
+        body_right = self.WIDTH - 12
+        body_bottom = height - 4
+        pointer_y = max(30, min(height - 22, round(height * 0.50)))
+        self._rounded_rectangle(4, 4, body_right, body_bottom, 14, fill=self.BODY, outline=self.BODY_BORDER)
         self.canvas.create_polygon(
-            self.WIDTH - 116,
-            body_bottom - 2,
-            self.WIDTH - 72,
-            body_bottom - 2,
-            self.WIDTH - 91,
-            height - 3,
+            body_right - 2,
+            pointer_y - 10,
+            body_right - 2,
+            pointer_y + 10,
+            self.WIDTH - 2,
+            pointer_y,
             fill=self.BODY,
             outline=self.BODY_BORDER,
         )
-        self.canvas.create_line(self.WIDTH - 115, body_bottom - 1, self.WIDTH - 73, body_bottom - 1, fill=self.BODY)
+        self.canvas.create_line(body_right - 2, pointer_y - 9, body_right - 2, pointer_y + 9, fill=self.BODY)
 
-        self.canvas.create_oval(13, 17, 20, 24, fill=status_color, outline="")
+        self.canvas.create_oval(11, 14, 18, 21, fill=status_color, outline="")
         self.canvas.create_text(
-            27,
-            20.5,
+            23,
+            17.5,
             anchor="w",
             text="xiexie 余量",
             fill=self.INK,
-            font=("Microsoft YaHei UI", 9, "bold"),
+            font=("Microsoft YaHei UI", 8, "bold"),
         )
         self.canvas.create_text(
-            self.WIDTH - 35,
-            20.5,
+            self.WIDTH - 42,
+            17.5,
             text="↻",
             fill=self.BLUE,
-            font=("Segoe UI Symbol", 10, "bold"),
+            font=("Segoe UI Symbol", 9, "bold"),
             tags=("refresh",),
         )
         self.canvas.create_text(
-            self.WIDTH - 16,
-            20.5,
+            self.WIDTH - 23,
+            17.5,
             text="×",
             fill=self.MUTED,
-            font=("Segoe UI", 11),
+            font=("Segoe UI", 10),
             tags=("close",),
         )
         return body_bottom
 
     def _draw_loading(self, message: str) -> None:
-        self._draw_chrome(91, self.AMBER)
+        self._draw_chrome(78, self.AMBER)
         self.canvas.create_text(
-            14,
-            49,
+            12,
+            42,
             anchor="w",
             text=message,
             fill=self.INK,
-            font=("Microsoft YaHei UI", 7),
+            font=("Microsoft YaHei UI", 6),
         )
         self.canvas.create_text(
-            14,
-            67,
+            12,
+            59,
             anchor="w",
             text="我在核对。",
             fill=self.MUTED,
@@ -294,10 +298,10 @@ class UsageOverlay:
         self._finish_drawing()
 
     def _draw_error(self, message: str) -> None:
-        self._draw_chrome(118, self.CORAL)
+        self._draw_chrome(104, self.CORAL)
         self.canvas.create_text(
-            14,
-            45,
+            12,
+            39,
             anchor="w",
             text="暂时读不到余量。",
             fill=self.INK,
@@ -305,17 +309,17 @@ class UsageOverlay:
         )
         short = self._short_error(message)
         self.canvas.create_text(
-            14,
-            62,
+            12,
+            53,
             anchor="nw",
-            width=(self.WIDTH - 28) * self._scale,
+            width=(self.WIDTH - 34) * self._scale,
             text=short,
             fill=self.MUTED,
             font=("Microsoft YaHei UI", 6),
         )
         self.canvas.create_text(
-            14,
-            94,
+            12,
+            84,
             anchor="w",
             text="会自动重试，也可双击刷新。",
             fill=self.CORAL,
@@ -327,7 +331,7 @@ class UsageOverlay:
         rows = snapshot.display_rows(limit=2)
         credits = snapshot.credits
         show_credits = bool(credits and credits.should_show)
-        height = 78 + max(1, len(rows)) * 38 + (15 if show_credits else 0)
+        height = 55 + max(1, len(rows)) * 34 + (13 if show_credits else 0)
         minimum = snapshot.minimum_remaining
         stale_after = max(120, self.settings.refresh_seconds * 2 + 30)
         is_stale = snapshot.is_stale(stale_after)
@@ -340,33 +344,33 @@ class UsageOverlay:
         self._draw_chrome(height, status_color)
 
         pill_text = snapshot.plan_type[:12]
-        pill_width = max(48, 14 + len(pill_text) * 8)
-        pill_x2 = self.WIDTH - 54
+        pill_width = max(44, 12 + len(pill_text) * 7)
+        pill_x2 = self.WIDTH - 52
         pill_x1 = pill_x2 - pill_width
-        self._rounded_rectangle(pill_x1, 14, pill_x2, 28, 7, fill=self.BLUE_SOFT, outline="")
+        self._rounded_rectangle(pill_x1, 11, pill_x2, 24, 7, fill=self.BLUE_SOFT, outline="")
         self.canvas.create_text(
             (pill_x1 + pill_x2) / 2,
-            21,
+            17.5,
             text=pill_text,
             fill=self.BLUE,
             font=("Segoe UI", 6, "bold"),
         )
 
-        y = 42
+        y = 35
         if rows:
             for row in rows:
                 self._draw_limit_row(y, row.label, row.window.remaining_percent, row.window.reset_text())
-                y += 38
+                y += 34
         else:
             self.canvas.create_text(
-                14,
-                y + 14,
+                12,
+                y + 12,
                 anchor="w",
                 text="Codex 暂未提供可显示的限额窗口。",
                 fill=self.MUTED,
                 font=("Microsoft YaHei UI", 6),
             )
-            y += 38
+            y += 34
 
         if is_stale:
             personality = "数据已过期，正在重新连接。"
@@ -379,30 +383,30 @@ class UsageOverlay:
         else:
             personality = "额度正常，我盯着。"
         self.canvas.create_text(
-            14,
+            12,
             y + 1,
             anchor="w",
             text=personality,
             fill=status_color,
-            font=("Microsoft YaHei UI", 7, "bold"),
+            font=("Microsoft YaHei UI", 6, "bold"),
         )
-        y += 18
+        y += 16
 
         if show_credits and credits:
             self.canvas.create_text(
-                14,
+                12,
                 y + 1,
                 anchor="w",
                 text=credits.display_text(),
                 fill=self.MUTED,
-                font=("Microsoft YaHei UI", 6),
+                font=("Microsoft YaHei UI", 5),
             )
             y += 15
         self._finish_drawing()
 
     def _draw_limit_row(self, y: int, label: str, remaining: int, reset_text: str) -> None:
         self.canvas.create_text(
-            14,
+            12,
             y,
             anchor="w",
             text=label,
@@ -410,28 +414,28 @@ class UsageOverlay:
             font=("Microsoft YaHei UI", 7, "bold"),
         )
         self.canvas.create_text(
-            self.WIDTH - 14,
+            self.WIDTH - 22,
             y,
             anchor="e",
-            text=f"剩余 {remaining}%",
+            text=f"{remaining}%",
             fill=self.INK,
             font=("Microsoft YaHei UI", 7, "bold"),
         )
 
-        x1, x2 = 14, self.WIDTH - 14
-        bar_y1, bar_y2 = y + 12, y + 17
+        x1, x2 = 12, self.WIDTH - 22
+        bar_y1, bar_y2 = y + 10, y + 14
         self._rounded_rectangle(x1, bar_y1, x2, bar_y2, 4, fill=self.BAR_BG, outline="")
         fill_width = (x2 - x1) * remaining / 100
         color = self.GREEN if remaining > 50 else self.AMBER if remaining > 20 else self.CORAL
         if fill_width > 1:
             self._rounded_rectangle(x1, bar_y1, x1 + fill_width, bar_y2, 4, fill=color, outline="")
         self.canvas.create_text(
-            14,
-            y + 27,
+            12,
+            y + 23,
             anchor="w",
             text=reset_text,
             fill=self.MUTED,
-            font=("Microsoft YaHei UI", 6),
+            font=("Microsoft YaHei UI", 5),
         )
 
     def _rounded_rectangle(self, x1, y1, x2, y2, radius, **kwargs):

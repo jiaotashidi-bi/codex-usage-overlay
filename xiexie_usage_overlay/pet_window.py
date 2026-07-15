@@ -105,19 +105,20 @@ def calculate_follow_position(
     pet_rect: Rect,
     overlay_width: int,
     overlay_height: int,
-    tail_offset_x: int,
+    pointer_offset_y: int,
+    gap: int,
     work_area: Rect,
     offset_x: int = 0,
     offset_y: int = 0,
 ) -> tuple[tuple[int, int], tuple[int, int]]:
     """Return the clamped target and the raw zero-offset base position."""
 
-    # The Codex pet lives in the lower-right part of its transparent host window.
-    # Ratios are used instead of fixed pixels so this survives Windows DPI scaling.
-    pet_anchor_x = pet_rect.right - round(pet_rect.width * 0.255)
-    pet_anchor_y = pet_rect.bottom - round(pet_rect.height * 0.400)
-    base_x = pet_anchor_x - tail_offset_x
-    base_y = pet_anchor_y - overlay_height
+    # The character occupies the lower-right part of the transparent pet host.
+    # Anchor the bubble's right-side pointer near her left shoulder.
+    pet_anchor_x = pet_rect.right - round(pet_rect.width * 0.470)
+    pet_anchor_y = pet_rect.bottom - round(pet_rect.height * 0.530)
+    base_x = pet_anchor_x - overlay_width - gap
+    base_y = pet_anchor_y - pointer_offset_y
 
     target_x = base_x + offset_x
     target_y = base_y + offset_y

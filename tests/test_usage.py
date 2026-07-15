@@ -18,6 +18,14 @@ class RateWindowTests(unittest.TestCase):
         window = RateWindow(used_percent=10, duration_minutes=300, resets_at=int(now + 7260))
         self.assertIn("小时", window.reset_text(now=now))
 
+    def test_reset_countdown_uses_relative_time_for_hours_and_days(self) -> None:
+        now = 1_000.0
+        hourly = RateWindow(used_percent=10, resets_at=int(now + 84 * 60))
+        weekly = RateWindow(used_percent=10, resets_at=int(now + 6 * 86400 + 3 * 3600))
+
+        self.assertEqual(hourly.reset_text(now=now), "1 小时 24 分后重置")
+        self.assertEqual(weekly.reset_text(now=now), "6 天 3 小时后重置")
+
     def test_percent_is_clamped(self) -> None:
         window = RateWindow.from_mapping({"usedPercent": 130})
         self.assertIsNotNone(window)
