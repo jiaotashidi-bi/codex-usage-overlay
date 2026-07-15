@@ -24,7 +24,7 @@ class OverlayService(Protocol):
 
 class UsageOverlay:
     WIDTH = 190
-    UI_SCALE = 1.12
+    UI_SCALE = 1.25
     PET_MISS_THRESHOLD = 10
     TRANSPARENT = "#010203"
     BODY = "#FFF9E9"
@@ -260,14 +260,14 @@ class UsageOverlay:
             anchor="w",
             text="xiexie 余量",
             fill=self.INK,
-            font=("Microsoft YaHei UI", 5, "bold"),
+            font=("Microsoft YaHei UI", 6, "bold"),
         )
         self.canvas.create_text(
             self.WIDTH - 42,
             17.5,
             text="↻",
             fill=self.BLUE,
-            font=("Segoe UI Symbol", 7, "bold"),
+            font=("Segoe UI Symbol", 8, "bold"),
             tags=("refresh",),
         )
         self.canvas.create_text(
@@ -275,7 +275,7 @@ class UsageOverlay:
             17.5,
             text="×",
             fill=self.MUTED,
-            font=("Segoe UI", 8),
+            font=("Segoe UI", 9),
             tags=("close",),
         )
         return body_bottom
@@ -356,7 +356,7 @@ class UsageOverlay:
             17.5,
             text=pill_text,
             fill=self.BLUE,
-            font=("Segoe UI", 5, "bold"),
+            font=("Segoe UI", 6, "bold"),
         )
 
         y = 35
@@ -391,7 +391,7 @@ class UsageOverlay:
             anchor="w",
             text=personality,
             fill=status_color,
-            font=("Microsoft YaHei UI", 6, "bold"),
+            font=("Microsoft YaHei UI", 7, "bold"),
         )
         y += 16
 
@@ -402,7 +402,7 @@ class UsageOverlay:
                 anchor="w",
                 text=credits.display_text(),
                 fill=self.MUTED,
-                font=("Microsoft YaHei UI", 6),
+                font=("Microsoft YaHei UI", 7),
             )
             y += 15
         self._finish_drawing()
@@ -414,7 +414,7 @@ class UsageOverlay:
             anchor="w",
             text=label,
             fill=self.INK,
-            font=("Microsoft YaHei UI", 7, "bold"),
+            font=("Microsoft YaHei UI", 8, "bold"),
         )
         self.canvas.create_text(
             self.WIDTH - 22,
@@ -422,7 +422,7 @@ class UsageOverlay:
             anchor="e",
             text=f"{remaining}%",
             fill=self.INK,
-            font=("Microsoft YaHei UI", 7, "bold"),
+            font=("Microsoft YaHei UI", 8, "bold"),
         )
 
         x1, x2 = 12, self.WIDTH - 22
@@ -438,7 +438,7 @@ class UsageOverlay:
             anchor="w",
             text=reset_text,
             fill=self.MUTED,
-            font=("Microsoft YaHei UI", 6),
+            font=("Microsoft YaHei UI", 7),
         )
 
     def _rounded_rectangle(self, x1, y1, x2, y2, radius, **kwargs):
