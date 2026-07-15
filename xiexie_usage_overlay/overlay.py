@@ -11,6 +11,9 @@ from .settings import Settings
 from .usage import UsageSnapshot
 
 
+logger = logging.getLogger(__name__)
+
+
 class OverlayService(Protocol):
     def start(self) -> None: ...
 
@@ -167,6 +170,21 @@ class UsageOverlay:
         if self._closing or self._pet_locator is None:
             return
 
+        try:
+            self._sync_to_pet_once()
+        except Exception:
+            logger.exception("Pet follow update failed; the loop will continue")
+        finally:
+            if not self._closing:
+                try:
+                    self.root.after(150, self._sync_to_pet)
+                except tk.TclError:
+                    pass
+
+    def _sync_to_pet_once(self) -> None:
+        if self._pet_locator is None:
+            return
+
         pet = self._pet_locator.find()
         pet_present = self._pet_presence.observe(pet is not None)
         if pet is None and not pet_present:
@@ -174,7 +192,7 @@ class UsageOverlay:
             self._follow_base = None
             self._drag_origin = None
             if self._pet_shown:
-                logging.getLogger(__name__).info("Codex pet hidden; hiding usage overlay")
+                logger.info("Codex pet hidden; hiding usage overlay")
                 self.root.withdraw()
                 self._pet_shown = False
         elif pet is not None:
@@ -197,13 +215,11 @@ class UsageOverlay:
                 if abs(self.root.winfo_x() - x) > 1 or abs(self.root.winfo_y() - y) > 1:
                     self.root.geometry(f"{self._pixel_width}x{overlay_height}+{x}+{y}")
             if not self._pet_shown:
-                logging.getLogger(__name__).info("Codex pet visible; showing usage overlay")
+                logger.info("Codex pet visible; showing usage overlay")
                 self.root.deiconify()
                 self.root.attributes("-topmost", self.settings.always_on_top)
                 self.root.lift()
                 self._pet_shown = True
-
-        self.root.after(150, self._sync_to_pet)
 
     def _redraw(self) -> None:
         if self._status == "snapshot" and self._snapshot is not None:
@@ -313,7 +329,14 @@ class UsageOverlay:
         show_credits = bool(credits and credits.should_show)
         height = 78 + max(1, len(rows)) * 38 + (15 if show_credits else 0)
         minimum = snapshot.minimum_remaining
-        status_color = self.GREEN if minimum is None or minimum > 20 else self.AMBER if minimum > 10 else self.CORAL
+        stale_after = max(120, self.settings.refresh_seconds * 2 + 30)
+        is_stale = snapshot.is_stale(stale_after)
+        if is_stale or (minimum is not None and minimum <= 10):
+            status_color = self.CORAL
+        elif minimum is not None and minimum <= 20:
+            status_color = self.AMBER
+        else:
+            status_color = self.GREEN
         self._draw_chrome(height, status_color)
 
         pill_text = snapshot.plan_type[:12]
@@ -345,7 +368,9 @@ class UsageOverlay:
             )
             y += 38
 
-        if minimum is None:
+        if is_stale:
+            personality = "数据已过期，正在重新连接。"
+        elif minimum is None:
             personality = "暂无百分比，我继续盯着。"
         elif minimum <= 10:
             personality = f"只剩 {minimum}%，快到顶了。"
@@ -501,6 +526,9 @@ class UsageOverlay:
     @staticmethod
     def _short_error(message: str) -> str:
         clean = " ".join(message.split())
+        lowered = clean.lower()
+        if "authentication required" in lowered or "not logged in" in lowered:
+            return "Codex CLI 未登录，请运行 codex.cmd login。"
         if len(clean) > 96:
             return clean[:93] + "…"
         return clean

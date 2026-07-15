@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -7,6 +8,9 @@ from typing import Callable, Literal
 
 from .app_server import AppServerError, CodexAppServerClient
 from .usage import UsageSnapshot
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -67,6 +71,12 @@ class UsageService:
             except (AppServerError, ValueError, OSError) as exc:
                 if self._stop.is_set():
                     break
+                logger.warning("Usage refresh failed: %s", exc)
+                self.handler(ServiceEvent("error", message=str(exc)))
+            except Exception as exc:
+                if self._stop.is_set():
+                    break
+                logger.exception("Unexpected usage service failure")
                 self.handler(ServiceEvent("error", message=str(exc)))
             finally:
                 client.close()

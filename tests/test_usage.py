@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 
 from xiexie_usage_overlay.usage import RateWindow, UsageSnapshot
 
@@ -75,7 +76,13 @@ class UsageSnapshotTests(unittest.TestCase):
         )
         self.assertEqual(snapshot.minimum_remaining, 95)
 
+    def test_stale_snapshot_detection(self) -> None:
+        received = datetime(2026, 7, 15, 8, 0, tzinfo=timezone.utc)
+        snapshot = UsageSnapshot((), received)
+
+        self.assertFalse(snapshot.is_stale(120, received + timedelta(seconds=120)))
+        self.assertTrue(snapshot.is_stale(120, received + timedelta(seconds=121)))
+
 
 if __name__ == "__main__":
     unittest.main()
-

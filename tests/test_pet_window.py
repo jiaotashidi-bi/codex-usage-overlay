@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 from xiexie_usage_overlay.pet_window import (
     WS_EX_LAYERED,
@@ -8,11 +9,27 @@ from xiexie_usage_overlay.pet_window import (
     WS_EX_TOPMOST,
     WS_EX_TRANSPARENT,
     PetPresenceDebouncer,
+    PetWindowLocator,
     Rect,
     WindowInfo,
     calculate_follow_position,
     pet_candidate_score,
 )
+
+
+def sample_pet() -> WindowInfo:
+    return WindowInfo(
+        handle=1,
+        rect=Rect(2138, 992, 2850, 1632),
+        visible=True,
+        cloaked=False,
+        title="ChatGPT",
+        class_name="Chrome_WidgetWin_1",
+        process_name="ChatGPT.exe",
+        style=0x14000000,
+        ex_style=WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
+        process_id=42,
+    )
 
 
 class PetPresenceDebouncerTests(unittest.TestCase):
@@ -49,17 +66,7 @@ class PetPresenceDebouncerTests(unittest.TestCase):
 
 class PetWindowDetectionTests(unittest.TestCase):
     def test_real_pet_window_shape_scores(self) -> None:
-        pet = WindowInfo(
-            handle=1,
-            rect=Rect(2138, 992, 2850, 1632),
-            visible=True,
-            cloaked=False,
-            title="ChatGPT",
-            class_name="Chrome_WidgetWin_1",
-            process_name="ChatGPT.exe",
-            style=0x14000000,
-            ex_style=WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
-        )
+        pet = sample_pet()
         self.assertIsNotNone(pet_candidate_score(pet))
 
     def test_main_app_window_is_rejected(self) -> None:
@@ -89,6 +96,36 @@ class PetWindowDetectionTests(unittest.TestCase):
             ex_style=WS_EX_LAYERED | WS_EX_TOOLWINDOW,
         )
         self.assertIsNone(pet_candidate_score(hidden))
+
+
+class PetWindowLocatorEfficiencyTests(unittest.TestCase):
+    def test_cached_window_skips_full_enumeration(self) -> None:
+        locator = PetWindowLocator.__new__(PetWindowLocator)
+        locator.supported = True
+        locator._last_handle = 1
+        locator._last_process_id = 42
+        locator._last_process_name = "ChatGPT.exe"
+        locator._next_full_scan_at = 0.0
+        locator._read_window = mock.Mock(return_value=sample_pet())
+        locator.user32 = mock.Mock()
+
+        self.assertEqual(locator.find(), sample_pet())
+        locator.user32.EnumWindows.assert_not_called()
+
+    def test_missing_window_throttles_full_enumeration(self) -> None:
+        locator = PetWindowLocator.__new__(PetWindowLocator)
+        locator.supported = True
+        locator._last_handle = None
+        locator._last_process_id = None
+        locator._last_process_name = ""
+        locator._next_full_scan_at = 0.0
+        locator._enum_proc_type = lambda callback: callback
+        locator._read_window = mock.Mock(return_value=None)
+        locator.user32 = mock.Mock()
+
+        self.assertIsNone(locator.find())
+        self.assertIsNone(locator.find())
+        locator.user32.EnumWindows.assert_called_once()
 
 
 class FollowPositionTests(unittest.TestCase):

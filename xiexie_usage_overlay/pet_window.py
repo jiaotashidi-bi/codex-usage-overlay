@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import time
 from ctypes import wintypes
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +42,7 @@ class WindowInfo:
     process_name: str
     style: int
     ex_style: int
+    process_id: int = 0
 
 
 class PetPresenceDebouncer:
@@ -147,9 +149,13 @@ if os.name == "nt":
 
 class PetWindowLocator:
     supported = os.name == "nt"
+    FULL_SCAN_INTERVAL_SECONDS = 0.75
 
     def __init__(self) -> None:
         self._last_handle: int | None = None
+        self._last_process_id: int | None = None
+        self._last_process_name = ""
+        self._next_full_scan_at = 0.0
         if not self.supported:
             return
 
@@ -194,6 +200,18 @@ class PetWindowLocator:
         if not self.supported:
             return None
 
+        if self._last_handle is not None:
+            cached = self._read_window(self._last_handle)
+            if cached is not None and pet_candidate_score(cached) is not None:
+                self._remember(cached)
+                return cached
+            self._forget_cached_window()
+
+        now = time.monotonic()
+        if now < self._next_full_scan_at:
+            return None
+        self._next_full_scan_at = now + self.FULL_SCAN_INTERVAL_SECONDS
+
         candidates: list[tuple[int, WindowInfo]] = []
 
         @self._enum_proc_type
@@ -207,16 +225,22 @@ class PetWindowLocator:
 
         self.user32.EnumWindows(callback, 0)
         if not candidates:
-            self._last_handle = None
+            self._forget_cached_window()
             return None
-        if self._last_handle is not None:
-            for _score, candidate in candidates:
-                if candidate.handle == self._last_handle:
-                    return candidate
         candidates.sort(key=lambda pair: (pair[0], -(pair[1].rect.width * pair[1].rect.height)), reverse=True)
         selected = candidates[0][1]
-        self._last_handle = selected.handle
+        self._remember(selected)
         return selected
+
+    def _remember(self, window: WindowInfo) -> None:
+        self._last_handle = window.handle
+        self._last_process_id = window.process_id
+        self._last_process_name = window.process_name
+
+    def _forget_cached_window(self) -> None:
+        self._last_handle = None
+        self._last_process_id = None
+        self._last_process_name = ""
 
     def work_area(self, hwnd: int) -> Rect:
         if not self.supported:
@@ -237,18 +261,40 @@ class PetWindowLocator:
         class_name = self._window_string(self.user32.GetClassNameW, hwnd)
         pid = wintypes.DWORD()
         self.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-        process_name = self._process_name(pid.value)
         cloaked = self._is_cloaked(hwnd)
-        return WindowInfo(
+        style = int(self._get_window_long(hwnd, -16))
+        ex_style = int(self._get_window_long(hwnd, -20))
+        process_id = int(pid.value)
+        cached_process_name = (
+            self._last_process_name
+            if int(hwnd) == self._last_handle and process_id == self._last_process_id
+            else None
+        )
+        preliminary = WindowInfo(
             handle=int(hwnd),
             rect=Rect(rect.left, rect.top, rect.right, rect.bottom),
             visible=visible,
             cloaked=cloaked,
             title=title,
             class_name=class_name,
-            process_name=process_name,
-            style=int(self._get_window_long(hwnd, -16)),
-            ex_style=int(self._get_window_long(hwnd, -20)),
+            process_name=cached_process_name or "",
+            style=style,
+            ex_style=ex_style,
+            process_id=process_id,
+        )
+        if cached_process_name is not None or pet_candidate_score(preliminary) is None:
+            return preliminary
+        return WindowInfo(
+            handle=preliminary.handle,
+            rect=preliminary.rect,
+            visible=preliminary.visible,
+            cloaked=preliminary.cloaked,
+            title=preliminary.title,
+            class_name=preliminary.class_name,
+            process_name=self._process_name(process_id),
+            style=preliminary.style,
+            ex_style=preliminary.ex_style,
+            process_id=process_id,
         )
 
     @staticmethod

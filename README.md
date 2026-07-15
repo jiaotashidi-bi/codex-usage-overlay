@@ -62,6 +62,14 @@ Windows 用户也可以直接双击：
 python main.py --once
 ```
 
+如果提示 Codex CLI 未登录，请先执行：
+
+```powershell
+codex.cmd login
+```
+
+桌面 Codex 的登录状态与 Codex CLI 可能不同；本项目读取余量时使用 CLI 登录状态。
+
 运行测试：
 
 ```powershell
@@ -135,6 +143,14 @@ Read the live rate limit once and print JSON:
 ```powershell
 python main.py --once
 ```
+
+If Codex reports that authentication is required, sign in to the CLI first:
+
+```powershell
+codex.cmd login
+```
+
+The Codex desktop app and Codex CLI can have separate sign-in states. This project uses the CLI session when reading rate limits.
 
 Run the test suite:
 

@@ -11,6 +11,8 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Callable
 
+from . import __version__
+
 
 class AppServerError(RuntimeError):
     """Raised when the local Codex app-server cannot satisfy a request."""
@@ -112,7 +114,7 @@ class CodexAppServerClient:
                     "clientInfo": {
                         "name": "xiexie_usage_overlay",
                         "title": "xiexie Usage Overlay",
-                        "version": "0.1.0",
+                        "version": __version__,
                     },
                     "capabilities": {"experimentalApi": True},
                 },
@@ -265,4 +267,3 @@ class CodexAppServerClient:
 
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
         self.close()
-

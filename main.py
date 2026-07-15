@@ -96,14 +96,14 @@ def main() -> int:
     if not _acquire_single_instance():
         return 0
 
-    settings = Settings.load()
-    if args.reset_position:
-        settings.x = None
-        settings.y = None
-    if args.refresh_seconds is not None:
-        settings.refresh_seconds = max(30, min(900, args.refresh_seconds))
-
     try:
+        settings = Settings.load()
+        if args.reset_position:
+            settings.x = None
+            settings.y = None
+        if args.refresh_seconds is not None:
+            settings.refresh_seconds = max(30, min(900, args.refresh_seconds))
+
         if args.demo:
             service_factory = lambda handler: DemoUsageService(handler)
         else:

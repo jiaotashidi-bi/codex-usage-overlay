@@ -208,6 +208,18 @@ class UsageSnapshot:
         values = [row.window.remaining_percent for row in self.display_rows(limit=20)]
         return min(values) if values else None
 
+    def age_seconds(self, now: datetime | None = None) -> float:
+        current = now or datetime.now().astimezone()
+        received = self.received_at
+        if received.tzinfo is None and current.tzinfo is not None:
+            received = received.replace(tzinfo=current.tzinfo)
+        elif received.tzinfo is not None and current.tzinfo is None:
+            current = current.replace(tzinfo=received.tzinfo)
+        return max(0.0, (current - received).total_seconds())
+
+    def is_stale(self, max_age_seconds: float, now: datetime | None = None) -> bool:
+        return self.age_seconds(now) > max(1.0, max_age_seconds)
+
     def to_safe_dict(self) -> dict[str, Any]:
         return {
             "planType": self.plan_type,
@@ -230,4 +242,3 @@ class UsageSnapshot:
                 "balance": self.credits.balance,
             },
         }
-

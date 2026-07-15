@@ -14,6 +14,24 @@ def app_data_dir() -> Path:
     return root / "xiexie-usage-overlay"
 
 
+def _optional_int(value) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _bounded_int(value, default: int, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool):
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return max(minimum, min(maximum, parsed))
+
+
+def _boolean(value, default: bool) -> bool:
+    return value if isinstance(value, bool) else default
+
+
 @dataclass
 class Settings:
     x: int | None = None
@@ -33,20 +51,15 @@ class Settings:
             return cls()
         if not isinstance(data, dict):
             return cls()
-        settings = cls(
-            x=data.get("x") if isinstance(data.get("x"), int) else None,
-            y=data.get("y") if isinstance(data.get("y"), int) else None,
-            refresh_seconds=data.get("refresh_seconds", 60),
-            always_on_top=bool(data.get("always_on_top", True)),
-            warning_threshold=data.get("warning_threshold", 20),
-            follow_offset_x=data.get("follow_offset_x", 0),
-            follow_offset_y=data.get("follow_offset_y", 0),
+        return cls(
+            x=_optional_int(data.get("x")),
+            y=_optional_int(data.get("y")),
+            refresh_seconds=_bounded_int(data.get("refresh_seconds", 60), 60, 30, 900),
+            always_on_top=_boolean(data.get("always_on_top", True), True),
+            warning_threshold=_bounded_int(data.get("warning_threshold", 20), 20, 1, 50),
+            follow_offset_x=_bounded_int(data.get("follow_offset_x", 0), 0, -20_000, 20_000),
+            follow_offset_y=_bounded_int(data.get("follow_offset_y", 0), 0, -20_000, 20_000),
         )
-        settings.refresh_seconds = max(30, min(900, int(settings.refresh_seconds)))
-        settings.warning_threshold = max(1, min(50, int(settings.warning_threshold)))
-        settings.follow_offset_x = int(settings.follow_offset_x) if isinstance(settings.follow_offset_x, int) else 0
-        settings.follow_offset_y = int(settings.follow_offset_y) if isinstance(settings.follow_offset_y, int) else 0
-        return settings
 
     def save(self) -> None:
         directory = app_data_dir()
