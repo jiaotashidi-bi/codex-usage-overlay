@@ -336,7 +336,8 @@ class UsageOverlay:
         rows = snapshot.display_rows(limit=2)
         credits = snapshot.credits
         show_credits = bool(credits and credits.should_show)
-        height = 55 + max(1, len(rows)) * 34 + (13 if show_credits else 0)
+        pixel_height = self._snapshot_pixel_height(len(rows), show_credits)
+        height = pixel_height / self._scale_y
         minimum = snapshot.minimum_remaining
         stale_after = max(120, self.settings.refresh_seconds * 2 + 30)
         is_stale = snapshot.is_stale(stale_after)
@@ -408,6 +409,14 @@ class UsageOverlay:
             )
             y += 15
         self._finish_drawing()
+
+    @staticmethod
+    def _snapshot_pixel_height(row_count: int, show_credits: bool) -> int:
+        if show_credits:
+            return 250
+        if row_count >= 2:
+            return 230
+        return 150
 
     def _draw_limit_row(self, y: int, label: str, remaining: int, reset_text: str) -> None:
         self.canvas.create_text(

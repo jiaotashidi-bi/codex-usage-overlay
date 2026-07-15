@@ -30,6 +30,11 @@ class OverlayRecoveryTests(unittest.TestCase):
         )
         self.assertIn("codex.cmd login", message)
 
+    def test_snapshot_height_grows_for_two_rows_and_credits(self) -> None:
+        self.assertEqual(UsageOverlay._snapshot_pixel_height(1, False), 150)
+        self.assertEqual(UsageOverlay._snapshot_pixel_height(2, False), 230)
+        self.assertEqual(UsageOverlay._snapshot_pixel_height(2, True), 250)
+
 
 if __name__ == "__main__":
     unittest.main()
