@@ -24,6 +24,7 @@ class OverlayService(Protocol):
 
 class UsageOverlay:
     WIDTH = 190
+    UI_SCALE = 1.12
     PET_MISS_THRESHOLD = 10
     TRANSPARENT = "#010203"
     BODY = "#FFF9E9"
@@ -47,9 +48,9 @@ class UsageOverlay:
         is_windows = self.root.tk.call("tk", "windowingsystem") == "win32"
         if is_windows:
             self.root.wm_attributes("-transparentcolor", self.TRANSPARENT)
-        # Tk canvas coordinates are already physical pixels in this DPI-aware process.
-        # Applying the monitor DPI factor again made the bubble nearly twice as large.
-        self._scale = 1.0
+        # This is a small, deliberate design scale. It must stay independent from
+        # the monitor DPI, which Tk already applies for this DPI-aware process.
+        self._scale = self.UI_SCALE
         self._pixel_width = round(self.WIDTH * self._scale)
 
         self.canvas = tk.Canvas(
@@ -287,7 +288,7 @@ class UsageOverlay:
             anchor="w",
             text=message,
             fill=self.INK,
-            font=("Microsoft YaHei UI", 5),
+            font=("Microsoft YaHei UI", 6),
         )
         self.canvas.create_text(
             12,
@@ -317,7 +318,7 @@ class UsageOverlay:
             width=(self.WIDTH - 34) * self._scale,
             text=short,
             fill=self.MUTED,
-            font=("Microsoft YaHei UI", 5),
+            font=("Microsoft YaHei UI", 6),
         )
         self.canvas.create_text(
             12,
@@ -325,7 +326,7 @@ class UsageOverlay:
             anchor="w",
             text="会自动重试，也可双击刷新。",
             fill=self.CORAL,
-            font=("Microsoft YaHei UI", 5, "bold"),
+            font=("Microsoft YaHei UI", 6, "bold"),
         )
         self._finish_drawing()
 
@@ -390,7 +391,7 @@ class UsageOverlay:
             anchor="w",
             text=personality,
             fill=status_color,
-            font=("Microsoft YaHei UI", 5, "bold"),
+            font=("Microsoft YaHei UI", 6, "bold"),
         )
         y += 16
 
@@ -401,7 +402,7 @@ class UsageOverlay:
                 anchor="w",
                 text=credits.display_text(),
                 fill=self.MUTED,
-                font=("Microsoft YaHei UI", 5),
+                font=("Microsoft YaHei UI", 6),
             )
             y += 15
         self._finish_drawing()
@@ -413,7 +414,7 @@ class UsageOverlay:
             anchor="w",
             text=label,
             fill=self.INK,
-            font=("Microsoft YaHei UI", 6, "bold"),
+            font=("Microsoft YaHei UI", 7, "bold"),
         )
         self.canvas.create_text(
             self.WIDTH - 22,
@@ -421,7 +422,7 @@ class UsageOverlay:
             anchor="e",
             text=f"{remaining}%",
             fill=self.INK,
-            font=("Microsoft YaHei UI", 6, "bold"),
+            font=("Microsoft YaHei UI", 7, "bold"),
         )
 
         x1, x2 = 12, self.WIDTH - 22
@@ -437,7 +438,7 @@ class UsageOverlay:
             anchor="w",
             text=reset_text,
             fill=self.MUTED,
-            font=("Microsoft YaHei UI", 5),
+            font=("Microsoft YaHei UI", 6),
         )
 
     def _rounded_rectangle(self, x1, y1, x2, y2, radius, **kwargs):
