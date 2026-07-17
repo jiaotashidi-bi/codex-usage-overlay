@@ -36,10 +36,14 @@ class UsageService:
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="xiexie-usage-service", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="codex-usage-overlay-service", daemon=True)
         self._thread.start()
 
     def refresh_now(self) -> None:
+        self._refresh.set()
+
+    def set_refresh_seconds(self, seconds: int) -> None:
+        self.refresh_seconds = max(30, min(900, int(seconds)))
         self._refresh.set()
 
     def stop(self) -> None:
@@ -128,6 +132,9 @@ class DemoUsageService:
 
     def refresh_now(self) -> None:
         self.start()
+
+    def set_refresh_seconds(self, _seconds: int) -> None:
+        return
 
     def stop(self) -> None:
         return

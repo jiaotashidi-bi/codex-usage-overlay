@@ -112,8 +112,8 @@ class CodexAppServerClient:
                 "initialize",
                 {
                     "clientInfo": {
-                        "name": "xiexie_usage_overlay",
-                        "title": "xiexie Usage Overlay",
+                        "name": "codex_usage_overlay",
+                        "title": "Codex Usage Overlay",
                         "version": __version__,
                     },
                     "capabilities": {"experimentalApi": True},

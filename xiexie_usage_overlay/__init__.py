@@ -1,3 +1,3 @@
-"""xiexie Codex usage overlay."""
+"""Codex usage overlay that follows the currently selected desktop pet."""
 
-__version__ = "0.3.7"
+__version__ = "0.4.0"

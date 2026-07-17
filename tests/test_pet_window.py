@@ -13,6 +13,7 @@ from xiexie_usage_overlay.pet_window import (
     Rect,
     WindowInfo,
     calculate_follow_position,
+    display_scale_factor,
     pet_candidate_score,
 )
 
@@ -154,6 +155,19 @@ class FollowPositionTests(unittest.TestCase):
             offset_y=-999,
         )
         self.assertEqual(target, (0, 0))
+
+
+class DisplayScaleTests(unittest.TestCase):
+    def test_reference_dpi_preserves_tuned_size(self) -> None:
+        self.assertEqual(display_scale_factor(192), 1.0)
+
+    def test_lower_dpi_reduces_physical_size(self) -> None:
+        self.assertEqual(display_scale_factor(96), 0.5)
+        self.assertAlmostEqual(display_scale_factor(120), 0.625)
+
+    def test_user_size_multiplier_is_applied_and_clamped(self) -> None:
+        self.assertAlmostEqual(display_scale_factor(192, 1.15), 1.15)
+        self.assertAlmostEqual(display_scale_factor(192, 99), 1.5)
 
 
 if __name__ == "__main__":

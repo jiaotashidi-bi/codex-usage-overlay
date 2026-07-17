@@ -3,11 +3,20 @@ from __future__ import annotations
 import logging
 import queue
 import tkinter as tk
+from tkinter import messagebox, ttk
 from typing import Protocol
 
-from .pet_window import PetPresenceDebouncer, PetWindowLocator, WindowInfo, calculate_follow_position
+from .pet_identity import PetIdentityResolver, compact_display_name
+from .pet_window import (
+    PetPresenceDebouncer,
+    PetWindowLocator,
+    WindowInfo,
+    calculate_follow_position,
+    display_scale_factor,
+)
 from .service import ServiceEvent
 from .settings import Settings
+from .startup import is_startup_enabled, set_startup
 from .usage import UsageSnapshot
 
 
@@ -19,13 +28,16 @@ class OverlayService(Protocol):
 
     def refresh_now(self) -> None: ...
 
+    def set_refresh_seconds(self, seconds: int) -> None: ...
+
     def stop(self) -> None: ...
 
 
 class UsageOverlay:
     WIDTH = 190
-    UI_SCALE_X = 1.36
-    UI_SCALE_Y = 150 / 89
+    REFERENCE_SCALE_X = 1.36
+    REFERENCE_SCALE_Y = 150 / 89
+    IDENTITY_POLL_MS = 2_000
     PET_MISS_THRESHOLD = 10
     TRANSPARENT = "#010203"
     BODY = "#FFF9E9"
@@ -41,18 +53,20 @@ class UsageOverlay:
 
     def __init__(self, settings: Settings, service_factory) -> None:
         self.settings = settings
+        self._identity_resolver = PetIdentityResolver()
+        self._identity = self._identity_resolver.resolve()
+        self._pet_name = self._identity.display_name
+        self._pet_locator = PetWindowLocator() if PetWindowLocator.supported else None
         self.root = tk.Tk()
-        self.root.title("xiexie Codex 余量")
+        self.root.title(f"{self._pet_name} Codex 余量")
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", settings.always_on_top)
         self.root.configure(bg=self.TRANSPARENT)
         is_windows = self.root.tk.call("tk", "windowingsystem") == "win32"
         if is_windows:
             self.root.wm_attributes("-transparentcolor", self.TRANSPARENT)
-        # These are deliberate design scales and stay independent from monitor DPI,
-        # which Tk already applies for this DPI-aware process.
-        self._scale_x = self.UI_SCALE_X
-        self._scale_y = self.UI_SCALE_Y
+        self._display_dpi = self._pet_locator.system_dpi() if self._pet_locator is not None else 96
+        self._scale_x, self._scale_y = self._calculate_scales(self._display_dpi)
         self._pixel_width = round(self.WIDTH * self._scale_x)
 
         self.canvas = tk.Canvas(
@@ -73,20 +87,22 @@ class UsageOverlay:
         self._height = 89
         self._drag_origin: tuple[int, int, int, int] | None = None
         self._closing = False
-        self._pet_locator = PetWindowLocator() if PetWindowLocator.supported else None
         self._pet_presence = PetPresenceDebouncer(self.PET_MISS_THRESHOLD)
         self._pet_window: WindowInfo | None = None
         self._pet_shown = self._pet_locator is None
         self._follow_base: tuple[int, int] | None = None
+        self._settings_window: tk.Toplevel | None = None
 
         self._menu = tk.Menu(self.root, tearoff=False, font=("Microsoft YaHei UI", 9))
         self._menu.add_command(label="立即刷新", command=self._service.refresh_now)
+        self._menu.add_command(label="设置…", command=self._open_settings)
         self._topmost_var = tk.BooleanVar(value=settings.always_on_top)
         self._menu.add_checkbutton(label="保持置顶", variable=self._topmost_var, command=self._toggle_topmost)
         if self._pet_locator is not None:
             self._menu.add_command(label="重置跟随位置", command=self._reset_follow_position)
         self._menu.add_separator()
-        self._menu.add_command(label="退出 xiexie 余量", command=self.close)
+        self._menu.add_command(label=f"退出 {self._pet_name} 余量", command=self.close)
+        self._exit_menu_index = self._menu.index("end")
 
         self.canvas.bind("<ButtonPress-1>", self._start_drag)
         self.canvas.bind("<B1-Motion>", self._drag)
@@ -104,6 +120,7 @@ class UsageOverlay:
             self.root.after(50, self._sync_to_pet)
         self.root.after(100, self._drain_events)
         self.root.after(30_000, self._tick)
+        self.root.after(self.IDENTITY_POLL_MS, self._sync_pet_identity)
         self._service.start()
 
     def run(self) -> None:
@@ -116,6 +133,60 @@ class UsageOverlay:
         self._save_position()
         self._service.stop()
         self.root.destroy()
+
+    def _calculate_scales(self, dpi: int) -> tuple[float, float]:
+        factor = display_scale_factor(dpi, self.settings.size_multiplier)
+        return self.REFERENCE_SCALE_X * factor, self.REFERENCE_SCALE_Y * factor
+
+    def _apply_display_scale(self, dpi: int, force: bool = False) -> bool:
+        dpi = max(72, min(int(dpi or 96), 768))
+        scale_x, scale_y = self._calculate_scales(dpi)
+        if not force and abs(scale_x - self._scale_x) < 0.001 and abs(scale_y - self._scale_y) < 0.001:
+            self._display_dpi = dpi
+            return False
+
+        self.root.update_idletasks()
+        old_height = round(self._height * self._scale_y)
+        x = self.root.winfo_x()
+        y = self.root.winfo_y()
+        self._display_dpi = dpi
+        self._scale_x = scale_x
+        self._scale_y = scale_y
+        self._pixel_width = round(self.WIDTH * self._scale_x)
+        new_height = round(self._height * self._scale_y)
+        new_y = max(0, y + old_height - new_height)
+        self.canvas.configure(width=self._pixel_width, height=new_height)
+        self.root.geometry(f"{self._pixel_width}x{new_height}+{x}+{new_y}")
+        self._redraw()
+        return True
+
+    def _font(self, family: str, points: int, weight: str | None = None):
+        factor = display_scale_factor(self._display_dpi, self.settings.size_multiplier)
+        reference_pixels = points * 192 / 72
+        pixel_size = max(5, round(reference_pixels * factor))
+        return (family, -pixel_size, weight) if weight else (family, -pixel_size)
+
+    def _sync_pet_identity(self) -> None:
+        if self._closing:
+            return
+        try:
+            identity = self._identity_resolver.resolve()
+            if identity != self._identity:
+                logger.info(
+                    "Selected Codex pet changed from %s to %s",
+                    self._identity.avatar_id or "unknown",
+                    identity.avatar_id or "unknown",
+                )
+                self._identity = identity
+                self._pet_name = identity.display_name
+                self.root.title(f"{self._pet_name} Codex 余量")
+                self._menu.entryconfigure(self._exit_menu_index, label=f"退出 {self._pet_name} 余量")
+                self._redraw()
+        except Exception:
+            logger.exception("Unable to refresh selected Codex pet identity")
+        finally:
+            if not self._closing:
+                self.root.after(self.IDENTITY_POLL_MS, self._sync_pet_identity)
 
     def _place_initially(self) -> None:
         self.root.update_idletasks()
@@ -202,6 +273,7 @@ class UsageOverlay:
                 self._pet_shown = False
         elif pet is not None:
             self._pet_window = pet
+            self._apply_display_scale(self._pet_locator.dpi(pet.handle))
             work_area = self._pet_locator.work_area(pet.handle)
             overlay_height = round(self._height * self._scale_y)
             pointer_offset_y = round(self._height * 0.50 * self._scale_y)
@@ -260,16 +332,16 @@ class UsageOverlay:
             23,
             17.5,
             anchor="w",
-            text="xiexie 余量",
+            text=f"{compact_display_name(self._pet_name)} 余量",
             fill=self.INK,
-            font=("Microsoft YaHei UI", 6, "bold"),
+            font=self._font("Microsoft YaHei UI", 6, "bold"),
         )
         self.canvas.create_text(
             self.WIDTH - 42,
             17.5,
             text="↻",
             fill=self.BLUE,
-            font=("Segoe UI Symbol", 8, "bold"),
+            font=self._font("Segoe UI Symbol", 8, "bold"),
             tags=("refresh",),
         )
         self.canvas.create_text(
@@ -277,7 +349,7 @@ class UsageOverlay:
             17.5,
             text="×",
             fill=self.MUTED,
-            font=("Segoe UI", 9),
+            font=self._font("Segoe UI", 9),
             tags=("close",),
         )
         return body_bottom
@@ -290,7 +362,7 @@ class UsageOverlay:
             anchor="w",
             text=message,
             fill=self.INK,
-            font=("Microsoft YaHei UI", 6),
+            font=self._font("Microsoft YaHei UI", 6),
         )
         self.canvas.create_text(
             12,
@@ -298,7 +370,7 @@ class UsageOverlay:
             anchor="w",
             text="我在核对。",
             fill=self.MUTED,
-            font=("Microsoft YaHei UI", 6),
+            font=self._font("Microsoft YaHei UI", 6),
         )
         self._finish_drawing()
 
@@ -310,7 +382,7 @@ class UsageOverlay:
             anchor="w",
             text="暂时读不到余量。",
             fill=self.INK,
-            font=("Microsoft YaHei UI", 6, "bold"),
+            font=self._font("Microsoft YaHei UI", 6, "bold"),
         )
         short = self._short_error(message)
         self.canvas.create_text(
@@ -320,7 +392,7 @@ class UsageOverlay:
             width=(self.WIDTH - 34) * self._scale_x,
             text=short,
             fill=self.MUTED,
-            font=("Microsoft YaHei UI", 6),
+            font=self._font("Microsoft YaHei UI", 6),
         )
         self.canvas.create_text(
             12,
@@ -328,7 +400,7 @@ class UsageOverlay:
             anchor="w",
             text="会自动重试，也可双击刷新。",
             fill=self.CORAL,
-            font=("Microsoft YaHei UI", 6, "bold"),
+            font=self._font("Microsoft YaHei UI", 6, "bold"),
         )
         self._finish_drawing()
 
@@ -337,7 +409,7 @@ class UsageOverlay:
         credits = snapshot.credits
         show_credits = bool(credits and credits.should_show)
         pixel_height = self._snapshot_pixel_height(len(rows), show_credits)
-        height = pixel_height / self._scale_y
+        height = pixel_height / self.REFERENCE_SCALE_Y
         minimum = snapshot.minimum_remaining
         stale_after = max(120, self.settings.refresh_seconds * 2 + 30)
         is_stale = snapshot.is_stale(stale_after)
@@ -359,7 +431,7 @@ class UsageOverlay:
             17.5,
             text=pill_text,
             fill=self.BLUE,
-            font=("Segoe UI", 6, "bold"),
+            font=self._font("Segoe UI", 6, "bold"),
         )
 
         y = 35
@@ -375,7 +447,7 @@ class UsageOverlay:
                 anchor="w",
                 text="Codex 暂未提供可显示的限额窗口。",
                 fill=self.MUTED,
-                font=("Microsoft YaHei UI", 6),
+                font=self._font("Microsoft YaHei UI", 6),
             )
             y += 34
 
@@ -395,7 +467,7 @@ class UsageOverlay:
             anchor="w",
             text=personality,
             fill=status_color,
-            font=("Microsoft YaHei UI", 7, "bold"),
+            font=self._font("Microsoft YaHei UI", 7, "bold"),
         )
         y += 16
 
@@ -406,7 +478,7 @@ class UsageOverlay:
                 anchor="w",
                 text=credits.display_text(),
                 fill=self.MUTED,
-                font=("Microsoft YaHei UI", 7),
+                font=self._font("Microsoft YaHei UI", 7),
             )
             y += 15
         self._finish_drawing()
@@ -430,7 +502,7 @@ class UsageOverlay:
             anchor="w",
             text=label,
             fill=self.INK,
-            font=("Microsoft YaHei UI", 8, "bold"),
+            font=self._font("Microsoft YaHei UI", 8, "bold"),
         )
         self.canvas.create_text(
             self.WIDTH - 22,
@@ -438,7 +510,7 @@ class UsageOverlay:
             anchor="e",
             text=f"{remaining}%",
             fill=self.INK,
-            font=("Microsoft YaHei UI", 8, "bold"),
+            font=self._font("Microsoft YaHei UI", 8, "bold"),
         )
 
         x1, x2 = 12, self.WIDTH - 22
@@ -454,7 +526,7 @@ class UsageOverlay:
             anchor="w",
             text=reset_text,
             fill=self.MUTED,
-            font=("Microsoft YaHei UI", 7),
+            font=self._font("Microsoft YaHei UI", 7),
         )
 
     def _rounded_rectangle(self, x1, y1, x2, y2, radius, **kwargs):
@@ -520,6 +592,118 @@ class UsageOverlay:
             self.settings.save()
         except (OSError, tk.TclError):
             pass
+
+    def _open_settings(self) -> None:
+        if self._settings_window is not None and self._settings_window.winfo_exists():
+            self._settings_window.lift()
+            self._settings_window.focus_force()
+            return
+
+        dialog = tk.Toplevel(self.root)
+        self._settings_window = dialog
+        dialog.title("Codex Usage Overlay 设置")
+        dialog.resizable(False, False)
+        dialog.attributes("-topmost", self.settings.always_on_top)
+        dialog.protocol("WM_DELETE_WINDOW", lambda: self._close_settings_window(dialog))
+
+        frame = ttk.Frame(dialog, padding=14)
+        frame.grid(row=0, column=0, sticky="nsew")
+        frame.columnconfigure(1, weight=1)
+
+        ttk.Label(frame, text="当前宠物").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Label(frame, text=f"{self._pet_name}（自动识别）").grid(row=0, column=1, sticky="w", pady=4)
+
+        labels = {
+            "auto": "自动（推荐）",
+            "small": "小（85%）",
+            "medium": "中（100%）",
+            "large": "大（115%）",
+            "custom": "自定义",
+        }
+        reverse_labels = {label: mode for mode, label in labels.items()}
+        size_var = tk.StringVar(value=labels.get(self.settings.size_mode, labels["auto"]))
+        ttk.Label(frame, text="浮窗尺寸").grid(row=1, column=0, sticky="w", pady=4)
+        size_box = ttk.Combobox(
+            frame,
+            textvariable=size_var,
+            values=list(labels.values()),
+            state="readonly",
+            width=18,
+        )
+        size_box.grid(row=1, column=1, sticky="ew", pady=4)
+
+        custom_var = tk.IntVar(value=round(self.settings.size_adjust * 100))
+        ttk.Label(frame, text="自定义比例").grid(row=2, column=0, sticky="w", pady=4)
+        custom_spin = tk.Spinbox(frame, from_=70, to=150, textvariable=custom_var, width=8)
+        custom_spin.grid(row=2, column=1, sticky="w", pady=4)
+        ttk.Label(frame, text="%（仅自定义模式生效）").grid(row=2, column=1, sticky="e", pady=4)
+
+        refresh_var = tk.IntVar(value=self.settings.refresh_seconds)
+        ttk.Label(frame, text="刷新间隔").grid(row=3, column=0, sticky="w", pady=4)
+        tk.Spinbox(frame, from_=30, to=900, increment=30, textvariable=refresh_var, width=8).grid(
+            row=3, column=1, sticky="w", pady=4
+        )
+        ttk.Label(frame, text="秒").grid(row=3, column=1, sticky="e", pady=4)
+
+        warning_var = tk.IntVar(value=self.settings.warning_threshold)
+        ttk.Label(frame, text="低额度提醒").grid(row=4, column=0, sticky="w", pady=4)
+        tk.Spinbox(frame, from_=1, to=50, textvariable=warning_var, width=8).grid(
+            row=4, column=1, sticky="w", pady=4
+        )
+        ttk.Label(frame, text="%").grid(row=4, column=1, sticky="e", pady=4)
+
+        topmost_var = tk.BooleanVar(value=self.settings.always_on_top)
+        startup_var = tk.BooleanVar(value=is_startup_enabled())
+        ttk.Checkbutton(frame, text="保持置顶", variable=topmost_var).grid(
+            row=5, column=0, columnspan=2, sticky="w", pady=(8, 2)
+        )
+        ttk.Checkbutton(frame, text="登录 Windows 后自动启动", variable=startup_var).grid(
+            row=6, column=0, columnspan=2, sticky="w", pady=2
+        )
+
+        button_row = ttk.Frame(frame)
+        button_row.grid(row=7, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        ttk.Button(button_row, text="取消", command=lambda: self._close_settings_window(dialog)).pack(
+            side="right", padx=(8, 0)
+        )
+
+        def apply_and_close() -> None:
+            mode = reverse_labels.get(size_var.get(), "auto")
+            try:
+                custom_adjust = max(70, min(150, int(custom_var.get()))) / 100
+                refresh_seconds = max(30, min(900, int(refresh_var.get())))
+                warning_threshold = max(1, min(50, int(warning_var.get())))
+                set_startup(bool(startup_var.get()))
+            except (OSError, ValueError) as exc:
+                messagebox.showerror("无法保存设置", str(exc), parent=dialog)
+                return
+
+            self.settings.size_mode = mode
+            self.settings.size_adjust = custom_adjust
+            self.settings.refresh_seconds = refresh_seconds
+            self.settings.warning_threshold = warning_threshold
+            self.settings.always_on_top = bool(topmost_var.get())
+            self.settings.start_with_windows = bool(startup_var.get())
+            self.settings.save()
+            self._topmost_var.set(self.settings.always_on_top)
+            self.root.attributes("-topmost", self.settings.always_on_top)
+            self._service.set_refresh_seconds(refresh_seconds)
+            self._apply_display_scale(self._display_dpi, force=True)
+            self._close_settings_window(dialog)
+
+        ttk.Button(button_row, text="应用", command=apply_and_close).pack(side="right")
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + max(0, (self.root.winfo_width() - dialog.winfo_width()) // 2)
+        y = self.root.winfo_y() + max(0, (self.root.winfo_height() - dialog.winfo_height()) // 2)
+        dialog.geometry(f"+{x}+{y}")
+        dialog.lift()
+        dialog.focus_force()
+
+    def _close_settings_window(self, dialog: tk.Toplevel) -> None:
+        if dialog.winfo_exists():
+            dialog.destroy()
+        if self._settings_window is dialog:
+            self._settings_window = None
 
     def _show_menu(self, event) -> None:
         try:

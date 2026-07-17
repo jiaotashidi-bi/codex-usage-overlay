@@ -18,6 +18,14 @@ class _UnexpectedFailureClient:
 
 
 class UsageServiceRecoveryTests(unittest.TestCase):
+    def test_refresh_interval_can_be_updated_live(self) -> None:
+        service = UsageService(lambda _event: None)
+
+        service.set_refresh_seconds(5)
+
+        self.assertEqual(service.refresh_seconds, 30)
+        self.assertTrue(service._refresh.is_set())
+
     def test_unexpected_failure_is_reported_instead_of_killing_thread(self) -> None:
         events = []
         service = UsageService(events.append)

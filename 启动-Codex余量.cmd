@@ -11,4 +11,3 @@ exit /b 0
 :console_fallback
 python "%~dp0main.py"
 if errorlevel 1 pause
-

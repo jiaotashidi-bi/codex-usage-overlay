@@ -13,6 +13,13 @@ WS_EX_TOPMOST = 0x00000008
 WS_EX_TRANSPARENT = 0x00000020
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_LAYERED = 0x00080000
+REFERENCE_DPI = 192
+
+
+def display_scale_factor(dpi: int, size_multiplier: float = 1.0) -> float:
+    safe_dpi = max(72, min(int(dpi or 96), 768))
+    safe_multiplier = max(0.7, min(float(size_multiplier), 1.5))
+    return safe_dpi / REFERENCE_DPI * safe_multiplier
 
 
 @dataclass(frozen=True)
@@ -180,6 +187,15 @@ class PetWindowLocator:
         self.user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(_MONITORINFO)]
         self.user32.GetMonitorInfoW.restype = wintypes.BOOL
 
+        self._get_dpi_for_window = getattr(self.user32, "GetDpiForWindow", None)
+        if self._get_dpi_for_window is not None:
+            self._get_dpi_for_window.argtypes = [wintypes.HWND]
+            self._get_dpi_for_window.restype = wintypes.UINT
+        self._get_dpi_for_system = getattr(self.user32, "GetDpiForSystem", None)
+        if self._get_dpi_for_system is not None:
+            self._get_dpi_for_system.argtypes = []
+            self._get_dpi_for_system.restype = wintypes.UINT
+
         get_long = self.user32.GetWindowLongPtrW if ctypes.sizeof(ctypes.c_void_p) == 8 else self.user32.GetWindowLongW
         get_long.argtypes = [wintypes.HWND, ctypes.c_int]
         get_long.restype = ctypes.c_ssize_t
@@ -252,6 +268,32 @@ class PetWindowLocator:
         if monitor and self.user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
             return Rect(info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom)
         return Rect(0, 0, self.user32.GetSystemMetrics(0), self.user32.GetSystemMetrics(1))
+
+    def dpi(self, hwnd: int) -> int:
+        if not self.supported:
+            return 96
+        if self._get_dpi_for_window is not None:
+            value = int(self._get_dpi_for_window(wintypes.HWND(hwnd)))
+            if value > 0:
+                return value
+        return self.system_dpi()
+
+    def system_dpi(self) -> int:
+        if not self.supported:
+            return 96
+        if self._get_dpi_for_system is not None:
+            value = int(self._get_dpi_for_system())
+            if value > 0:
+                return value
+        hdc = self.user32.GetDC(0)
+        if hdc:
+            try:
+                value = int(ctypes.windll.gdi32.GetDeviceCaps(hdc, 88))
+                if value > 0:
+                    return value
+            finally:
+                self.user32.ReleaseDC(0, hdc)
+        return 96
 
     def _read_window(self, hwnd) -> WindowInfo | None:
         rect = _RECT()

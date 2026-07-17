@@ -4,6 +4,8 @@ import unittest
 from unittest import mock
 
 from xiexie_usage_overlay.overlay import UsageOverlay
+from xiexie_usage_overlay.pet_identity import PetIdentity
+from xiexie_usage_overlay.settings import Settings
 
 
 class _FailingLocator:
@@ -38,6 +40,39 @@ class OverlayRecoveryTests(unittest.TestCase):
     def test_two_rows_have_additional_vertical_spacing(self) -> None:
         self.assertEqual(UsageOverlay._row_step(1), 34)
         self.assertEqual(UsageOverlay._row_step(2), 40)
+
+    def test_reference_and_low_dpi_sizes_are_consistent(self) -> None:
+        overlay = UsageOverlay.__new__(UsageOverlay)
+        overlay.settings = Settings(size_mode="auto")
+
+        reference_x, reference_y = overlay._calculate_scales(192)
+        low_x, low_y = overlay._calculate_scales(96)
+
+        self.assertAlmostEqual(reference_x, UsageOverlay.REFERENCE_SCALE_X)
+        self.assertAlmostEqual(reference_y, UsageOverlay.REFERENCE_SCALE_Y)
+        self.assertAlmostEqual(low_x, reference_x / 2)
+        self.assertAlmostEqual(low_y, reference_y / 2)
+
+    def test_pet_identity_change_updates_all_visible_labels(self) -> None:
+        overlay = UsageOverlay.__new__(UsageOverlay)
+        overlay._closing = False
+        overlay._identity = PetIdentity("custom:xiexie", "xiexie", "custom")
+        overlay._pet_name = "xiexie"
+        overlay._identity_resolver = mock.Mock(
+            resolve=mock.Mock(return_value=PetIdentity("custom:maomao", "maomao", "custom"))
+        )
+        overlay.root = mock.Mock()
+        overlay._menu = mock.Mock()
+        overlay._exit_menu_index = 4
+        overlay._redraw = mock.Mock()
+
+        overlay._sync_pet_identity()
+
+        self.assertEqual(overlay._pet_name, "maomao")
+        overlay.root.title.assert_called_once_with("maomao Codex 余量")
+        overlay._menu.entryconfigure.assert_called_once_with(4, label="退出 maomao 余量")
+        overlay._redraw.assert_called_once()
+        overlay.root.after.assert_called_once_with(UsageOverlay.IDENTITY_POLL_MS, overlay._sync_pet_identity)
 
 
 if __name__ == "__main__":
