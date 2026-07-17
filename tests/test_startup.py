@@ -26,8 +26,10 @@ class StartupTests(unittest.TestCase):
             legacy_exists = (root / "xiexie Codex Usage Overlay.lnk").exists()
 
         self.assertTrue(enabled)
-        self.assertIn(str(pythonw), script)
-        self.assertIn(str(main), script)
+        # Windows runners may expose the temporary directory through an 8.3
+        # alias (RUNNER~1) while Path.resolve() writes the equivalent long path.
+        self.assertIn(str(pythonw.resolve()), script)
+        self.assertIn(str(main.resolve()), script)
         self.assertIn(', 0, False', script)
         self.assertFalse(legacy_exists)
 
