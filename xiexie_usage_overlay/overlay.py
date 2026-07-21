@@ -496,6 +496,7 @@ class UsageOverlay:
         return 40 if row_count >= 2 else 34
 
     def _draw_limit_row(self, y: int, label: str, remaining: int, reset_text: str) -> None:
+        color = self.GREEN if remaining > 50 else self.AMBER if remaining > 20 else self.CORAL
         self.canvas.create_text(
             12,
             y,
@@ -509,7 +510,7 @@ class UsageOverlay:
             y,
             anchor="e",
             text=f"{remaining}%",
-            fill=self.INK,
+            fill=color,
             font=self._font("Microsoft YaHei UI", 8, "bold"),
         )
 
@@ -517,7 +518,6 @@ class UsageOverlay:
         bar_y1, bar_y2 = y + 10, y + 14
         self._rounded_rectangle(x1, bar_y1, x2, bar_y2, 4, fill=self.BAR_BG, outline="")
         fill_width = (x2 - x1) * remaining / 100
-        color = self.GREEN if remaining > 50 else self.AMBER if remaining > 20 else self.CORAL
         if fill_width > 1:
             self._rounded_rectangle(x1, bar_y1, x1 + fill_width, bar_y2, 4, fill=color, outline="")
         self.canvas.create_text(

@@ -41,6 +41,27 @@ class OverlayRecoveryTests(unittest.TestCase):
         self.assertEqual(UsageOverlay._row_step(1), 34)
         self.assertEqual(UsageOverlay._row_step(2), 40)
 
+    def test_percentage_uses_same_color_as_progress_bar(self) -> None:
+        overlay = UsageOverlay.__new__(UsageOverlay)
+        overlay.canvas = mock.Mock()
+        overlay._font = mock.Mock(return_value=("font",))
+        overlay._rounded_rectangle = mock.Mock()
+
+        for remaining, expected in ((75, UsageOverlay.GREEN), (42, UsageOverlay.AMBER), (14, UsageOverlay.CORAL)):
+            with self.subTest(remaining=remaining):
+                overlay.canvas.reset_mock()
+                overlay._rounded_rectangle.reset_mock()
+                overlay._draw_limit_row(35, "7 天额度", remaining, "1 小时后重置")
+
+                percentage = [
+                    call for call in overlay.canvas.create_text.call_args_list
+                    if call.kwargs.get("text") == f"{remaining}%"
+                ]
+                self.assertEqual(percentage[0].kwargs["fill"], expected)
+                self.assertTrue(
+                    any(call.kwargs.get("fill") == expected for call in overlay._rounded_rectangle.call_args_list)
+                )
+
     def test_reference_and_low_dpi_sizes_are_consistent(self) -> None:
         overlay = UsageOverlay.__new__(UsageOverlay)
         overlay.settings = Settings(size_mode="auto")
