@@ -589,16 +589,16 @@ class UsageOverlay:
             personality = "额度正常，我盯着。"
         self.canvas.create_text(
             12,
-            y - (3 if has_two_rows else 7),
+            y - 3 if has_two_rows else y + 1,
             anchor="nw",
             text=compact_display_name(personality, max_columns=64),
             width=(self.WIDTH - 34) * self._scale_x,
             justify="left",
             fill=self.CORAL if self._connection_error else status_color,
-            font=self._font("Microsoft YaHei UI", 7 if has_two_rows else 6, "bold"),
+            font=self._font("Microsoft YaHei UI", 7, "bold"),
         )
         # Reserve room for an optional credits line in the 250 px layout.
-        y += 24 if has_two_rows else 16
+        y += 24 if has_two_rows else 38
 
         if show_credits and credits:
             self.canvas.create_text(
@@ -618,7 +618,7 @@ class UsageOverlay:
             return 250
         if row_count >= 2:
             return 230
-        return 150
+        return 170
 
     @staticmethod
     def _row_step(row_count: int) -> int:
