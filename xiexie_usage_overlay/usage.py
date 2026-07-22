@@ -176,6 +176,55 @@ class UsageSnapshot:
             return cls.from_response(params)
         return cls.from_response({"rateLimits": params})
 
+    @classmethod
+    def from_safe_dict(cls, data: Any) -> "UsageSnapshot":
+        """Restore a display-only snapshot written by :meth:`to_safe_dict`."""
+
+        if not isinstance(data, dict):
+            raise ValueError("缓存的限额数据不是对象。")
+        limits = data.get("limits")
+        if not isinstance(limits, list) or not limits:
+            raise ValueError("缓存中没有可显示的限额。")
+
+        windows: list[dict[str, Any]] = []
+        for item in limits[:2]:
+            if not isinstance(item, dict):
+                continue
+            used = _integer(item.get("usedPercent"))
+            if used is None:
+                continue
+            windows.append(
+                {
+                    "usedPercent": used,
+                    "windowDurationMins": _integer(item.get("windowDurationMins")),
+                    "resetsAt": _integer(item.get("resetsAt")),
+                }
+            )
+        if not windows:
+            raise ValueError("缓存中没有有效的限额窗口。")
+
+        bucket: dict[str, Any] = {
+            "limitId": "codex-cache",
+            "planType": data.get("planType") or "CODEX",
+            "primary": windows[0],
+            "credits": data.get("credits"),
+        }
+        if len(windows) > 1:
+            bucket["secondary"] = windows[1]
+        snapshot = cls.from_response({"rateLimits": bucket})
+
+        updated_at = data.get("updatedAt")
+        if isinstance(updated_at, str):
+            try:
+                received_at = datetime.fromisoformat(updated_at)
+            except ValueError:
+                received_at = snapshot.received_at
+            else:
+                if received_at.tzinfo is None:
+                    received_at = received_at.astimezone()
+            snapshot = replace(snapshot, received_at=received_at)
+        return snapshot
+
     @property
     def plan_type(self) -> str:
         for bucket in self.buckets:

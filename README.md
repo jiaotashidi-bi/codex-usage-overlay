@@ -4,7 +4,11 @@
 
 A transparent Windows overlay that follows the currently selected Codex desktop pet and shows live Codex plan usage.
 
+> **V2 Companion prototype (`codex/v2-companion-prototype`)**: this branch adds a smart compact view, local trend estimates, last-known-good data, and pet-style guidance. The stable release remains on `main`.
+
 一个跟随当前 Codex 桌面宠物的透明 Windows 浮窗，用来显示套餐余量、进度和重置倒计时。
+
+> **V2 Companion 原型（`codex/v2-companion-prototype`）**：当前分支加入智能折叠、本地趋势预测、最后有效数据和宠物式建议。稳定版仍保留在 `main`。
 
 ---
 
@@ -23,6 +27,26 @@ A transparent Windows overlay that follows the currently selected Codex desktop 
 - 默认每 60 秒刷新，同时监听 `account/rateLimits/updated` 通知。
 - 支持开机启动、保持置顶、拖动微调、低额度提醒和立即刷新。
 - 不读取浏览器 Cookie，不复制或保存 Codex 登录令牌。
+
+### V2 Companion 体验
+
+- **智能形态**：默认显示极简胶囊，鼠标悬停自动展开，离开后自动收起。
+- **单击固定**：轻点浮窗可固定展开，再次轻点恢复智能收起；拖动仍用于调整位置。
+- **最后有效数据**：Codex CLI 或 App Server 暂时断开时继续显示上次额度，并标明数据时间。
+- **本地趋势预测**：根据同一重置周期内的百分比变化估算消耗速度，提示“稳定”“偏快”或“可能提前见底”。
+- **统一阈值**：红色和黄色阈值同时控制状态点、百分比、进度条与提醒。
+- **隐私可控**：历史只包含本地时间戳、百分比和重置时间，不包含令牌、对话或提示词；关闭历史后会删除历史文件。
+
+趋势至少需要约 10 分钟的本地样本，并且只是工程估算，不代表 Codex 官方预测。
+
+V2 设置中可以选择“智能、始终极简、始终展开”，并设置收起延迟、颜色阈值、趋势建议和本地历史。
+
+预览两种状态：
+
+```powershell
+python main.py --demo --view compact
+python main.py --demo --view expanded
+```
 
 ### 环境要求
 
@@ -172,6 +196,24 @@ python -m unittest discover -s tests -v
 - Polls every 60 seconds by default and listens for rate-limit update notifications.
 - Supports per-user startup, always-on-top behavior, drag offsets, warnings, and manual refresh.
 - Does not read browser cookies or store Codex authentication tokens.
+
+### V2 Companion experience
+
+- Starts as a compact capsule, expands on hover, and collapses after the configured delay.
+- A click pins the expanded view; dragging still adjusts the pet-relative position.
+- Keeps the last valid snapshot visible while reconnecting and labels its freshness.
+- Estimates local burn rate within the same reset cycle and reports stable, fast, or projected exhaustion states.
+- Uses configurable red and amber thresholds consistently across dots, percentages, bars, and guidance.
+- Stores only timestamps, percentages, and reset times locally. Disabling history removes the history file.
+
+Trend guidance needs roughly ten minutes of local samples and is an engineering estimate, not an official Codex forecast.
+
+Preview both layouts:
+
+```powershell
+python main.py --demo --view compact
+python main.py --demo --view expanded
+```
 
 ### Requirements
 

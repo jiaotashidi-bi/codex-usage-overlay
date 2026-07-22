@@ -83,6 +83,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--demo", action="store_true", help="使用演示数据打开界面")
     parser.add_argument("--reset-position", action="store_true", help="忘记上次保存的悬浮位置")
     parser.add_argument("--refresh-seconds", type=int, help="轮询间隔，最短 30 秒")
+    parser.add_argument(
+        "--view",
+        choices=("smart", "compact", "expanded"),
+        help="仅本次运行覆盖界面形态",
+    )
     parser.add_argument("--install-startup", action="store_true", help="安装当前用户的 Windows 开机启动项")
     parser.add_argument("--uninstall-startup", action="store_true", help="删除当前用户的 Windows 开机启动项")
     return parser.parse_args()
@@ -131,11 +136,17 @@ def main() -> int:
             settings.y = None
         if args.refresh_seconds is not None:
             settings.refresh_seconds = max(30, min(900, args.refresh_seconds))
+        if args.view is not None:
+            settings.interface_mode = args.view
 
         if args.demo:
             service_factory = lambda handler: DemoUsageService(handler)
         else:
-            service_factory = lambda handler: UsageService(handler, settings.refresh_seconds)
+            service_factory = lambda handler: UsageService(
+                handler,
+                settings.refresh_seconds,
+                history_enabled=settings.history_enabled,
+            )
         UsageOverlay(settings, service_factory).run()
     except Exception as exc:
         logging.exception("overlay failed")

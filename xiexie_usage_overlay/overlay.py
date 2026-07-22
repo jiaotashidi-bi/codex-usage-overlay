@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Protocol
 
+from .companion import UsageInsight
 from .pet_identity import PetIdentityResolver, compact_display_name
 from .pet_window import (
     PetPresenceDebouncer,
@@ -29,6 +30,8 @@ class OverlayService(Protocol):
     def refresh_now(self) -> None: ...
 
     def set_refresh_seconds(self, seconds: int) -> None: ...
+
+    def set_history_enabled(self, enabled: bool) -> None: ...
 
     def stop(self) -> None: ...
 
@@ -82,10 +85,17 @@ class UsageOverlay:
         self._events: queue.Queue[ServiceEvent] = queue.Queue()
         self._service: OverlayService = service_factory(self._events.put)
         self._snapshot: UsageSnapshot | None = None
+        self._insight: UsageInsight | None = None
+        self._data_source = "live"
+        self._connection_error = ""
         self._status = "loading"
         self._error = ""
         self._height = 89
         self._drag_origin: tuple[int, int, int, int] | None = None
+        self._drag_moved = False
+        self._expanded = settings.interface_mode == "expanded"
+        self._expanded_locked = settings.interface_mode == "expanded"
+        self._collapse_job: str | None = None
         self._closing = False
         self._pet_presence = PetPresenceDebouncer(self.PET_MISS_THRESHOLD)
         self._pet_window: WindowInfo | None = None
@@ -109,6 +119,8 @@ class UsageOverlay:
         self.canvas.bind("<ButtonRelease-1>", self._end_drag)
         self.canvas.bind("<Double-Button-1>", lambda _event: self._service.refresh_now())
         self.canvas.bind("<Button-3>", self._show_menu)
+        self.canvas.bind("<Enter>", self._pointer_enter)
+        self.canvas.bind("<Leave>", self._pointer_leave)
         self.canvas.tag_bind("refresh", "<Button-1>", self._refresh_clicked)
         self.canvas.tag_bind("close", "<Button-1>", self._close_clicked)
         self.root.bind("<Escape>", lambda _event: self.close())
@@ -228,6 +240,13 @@ class UsageOverlay:
             self._status = event.kind
             if event.snapshot is not None:
                 self._snapshot = event.snapshot
+            if event.insight is not None:
+                self._insight = event.insight
+            self._data_source = event.source
+            if event.kind == "error":
+                self._connection_error = event.message or "暂时无法连接。"
+            elif event.source == "live":
+                self._connection_error = ""
             if event.message:
                 self._error = event.message
 
@@ -301,12 +320,119 @@ class UsageOverlay:
                 self._pet_shown = True
 
     def _redraw(self) -> None:
-        if self._status == "snapshot" and self._snapshot is not None:
-            self._draw_snapshot(self._snapshot)
+        if self._snapshot is not None:
+            if self._should_compact():
+                self._draw_compact(self._snapshot)
+            else:
+                self._draw_snapshot(self._snapshot)
         elif self._status == "error":
             self._draw_error(self._error)
         else:
             self._draw_loading(self._error or "正在读取 Codex 余量…")
+
+    def _should_compact(self) -> bool:
+        if self.settings.interface_mode == "compact":
+            return True
+        if self.settings.interface_mode == "expanded":
+            return False
+        return not self._expanded
+
+    def _pointer_enter(self, _event=None) -> None:
+        if self.settings.interface_mode != "smart" or self._expanded:
+            return
+        self._cancel_collapse()
+        self._expanded = True
+        self._redraw()
+
+    def _pointer_leave(self, _event=None) -> None:
+        if self.settings.interface_mode != "smart" or self._expanded_locked:
+            return
+        self._cancel_collapse()
+        self._collapse_job = self.root.after(self.settings.collapse_seconds * 1000, self._collapse_smart_view)
+
+    def _collapse_smart_view(self) -> None:
+        self._collapse_job = None
+        if self._closing or self.settings.interface_mode != "smart" or self._expanded_locked:
+            return
+        self._expanded = False
+        self._redraw()
+
+    def _cancel_collapse(self) -> None:
+        if self._collapse_job is None:
+            return
+        try:
+            self.root.after_cancel(self._collapse_job)
+        except tk.TclError:
+            pass
+        self._collapse_job = None
+
+    def _toggle_smart_lock(self) -> None:
+        if self.settings.interface_mode != "smart":
+            return
+        self._cancel_collapse()
+        self._expanded_locked = not self._expanded_locked
+        self._expanded = self._expanded_locked
+        self._redraw()
+
+    def _draw_compact(self, snapshot: UsageSnapshot) -> None:
+        rows = snapshot.display_rows(limit=20)
+        limiting = min(rows, key=lambda row: row.window.remaining_percent) if rows else None
+        remaining = limiting.window.remaining_percent if limiting else None
+        status_color = self._status_color(snapshot, remaining)
+        height = 40
+        self._set_height(height)
+        self.canvas.delete("all")
+        body_right = self.WIDTH - 12
+        body_bottom = height - 4
+        pointer_y = height / 2
+        self._rounded_rectangle(4, 4, body_right, body_bottom, 12, fill=self.BODY, outline=self.BODY_BORDER)
+        self.canvas.create_polygon(
+            body_right - 2,
+            pointer_y - 8,
+            body_right - 2,
+            pointer_y + 8,
+            self.WIDTH - 2,
+            pointer_y,
+            fill=self.BODY,
+            outline=self.BODY_BORDER,
+        )
+        self.canvas.create_line(body_right - 2, pointer_y - 7, body_right - 2, pointer_y + 7, fill=self.BODY)
+        self.canvas.create_oval(10, 16, 17, 23, fill=status_color, outline="")
+        self.canvas.create_text(
+            21,
+            19.5,
+            anchor="w",
+            text=compact_display_name(self._pet_name, max_columns=6),
+            fill=self.INK,
+            font=self._font("Microsoft YaHei UI", 7, "bold"),
+        )
+        if remaining is not None:
+            self.canvas.create_text(
+                108,
+                19.5,
+                anchor="e",
+                text=f"{remaining}%",
+                fill=self._remaining_color(remaining),
+                font=self._font("Microsoft YaHei UI", 8, "bold"),
+            )
+        self.canvas.create_line(113, 13, 113, 27, fill=self.BODY_BORDER)
+        if self._connection_error:
+            reset_text = "离线 · 重连中"
+        elif self._data_source == "cache" or snapshot.is_stale(max(120, self.settings.refresh_seconds * 2 + 30)):
+            reset_text = "上次数据"
+        elif limiting is not None:
+            reset_text = self._compact_reset_text(limiting.window.reset_text())
+        else:
+            reset_text = "正在读取"
+        self.canvas.create_text(
+            119,
+            19.5,
+            anchor="w",
+            text=reset_text,
+            fill=self.MUTED if not self._connection_error else self.CORAL,
+            font=self._font("Microsoft YaHei UI", 6, "bold" if self._connection_error else None),
+        )
+        self._finish_drawing()
 
     def _draw_chrome(self, height: int, status_color: str) -> int:
         self._set_height(height)
@@ -413,12 +539,7 @@ class UsageOverlay:
         minimum = snapshot.minimum_remaining
         stale_after = max(120, self.settings.refresh_seconds * 2 + 30)
         is_stale = snapshot.is_stale(stale_after)
-        if is_stale or (minimum is not None and minimum <= 10):
-            status_color = self.CORAL
-        elif minimum is not None and minimum <= 20:
-            status_color = self.AMBER
-        else:
-            status_color = self.GREEN
+        status_color = self._status_color(snapshot, minimum)
         self._draw_chrome(height, status_color)
 
         pill_text = snapshot.plan_type[:12]
@@ -451,8 +572,12 @@ class UsageOverlay:
             )
             y += 34
 
-        if is_stale:
-            personality = "数据已过期，正在重新连接。"
+        if self._connection_error:
+            personality = f"离线 · {self._age_text(snapshot)}更新，正在重连。"
+        elif self._data_source == "cache" or is_stale:
+            personality = f"先显示{self._age_text(snapshot)}的数据，我在重连。"
+        elif self.settings.show_insights and self._insight is not None:
+            personality = self._insight.message
         elif minimum is None:
             personality = "暂无百分比，我继续盯着。"
         elif minimum <= 10:
@@ -461,15 +586,19 @@ class UsageOverlay:
             personality = f"只剩 {minimum}%，省着点。"
         else:
             personality = "额度正常，我盯着。"
+        has_two_rows = len(rows) >= 2
         self.canvas.create_text(
             12,
-            y + 1,
-            anchor="w",
-            text=personality,
-            fill=status_color,
+            y - (3 if has_two_rows else 0),
+            anchor="nw" if has_two_rows else "w",
+            text=compact_display_name(personality, max_columns=36 if has_two_rows else 18),
+            width=(self.WIDTH - 34) * self._scale_x if has_two_rows else 0,
+            justify="left",
+            fill=self.CORAL if self._connection_error else status_color,
             font=self._font("Microsoft YaHei UI", 7, "bold"),
         )
-        y += 16
+        # Reserve room for an optional credits line in the 250 px layout.
+        y += 24 if has_two_rows else 16
 
         if show_credits and credits:
             self.canvas.create_text(
@@ -493,10 +622,10 @@ class UsageOverlay:
 
     @staticmethod
     def _row_step(row_count: int) -> int:
-        return 40 if row_count >= 2 else 34
+        return 38 if row_count >= 2 else 34
 
     def _draw_limit_row(self, y: int, label: str, remaining: int, reset_text: str) -> None:
-        color = self.GREEN if remaining > 50 else self.AMBER if remaining > 20 else self.CORAL
+        color = self._remaining_color(remaining)
         self.canvas.create_text(
             12,
             y,
@@ -528,6 +657,40 @@ class UsageOverlay:
             fill=self.MUTED,
             font=self._font("Microsoft YaHei UI", 7),
         )
+
+    def _remaining_color(self, remaining: int) -> str:
+        if remaining <= self.settings.warning_threshold:
+            return self.CORAL
+        if remaining <= self.settings.amber_threshold:
+            return self.AMBER
+        return self.GREEN
+
+    def _status_color(self, snapshot: UsageSnapshot, minimum: int | None) -> str:
+        if self._connection_error or self._data_source == "cache":
+            return self.CORAL
+        if snapshot.is_stale(max(120, self.settings.refresh_seconds * 2 + 30)):
+            return self.CORAL
+        return self._remaining_color(minimum) if minimum is not None else self.GREEN
+
+    @staticmethod
+    def _compact_reset_text(value: str) -> str:
+        return (
+            value.replace("后重置", "")
+            .replace("小时", "时")
+            .replace("分钟", "分")
+            .replace(" ", "")[:9]
+        )
+
+    @staticmethod
+    def _age_text(snapshot: UsageSnapshot) -> str:
+        age = snapshot.age_seconds()
+        if age < 60:
+            return "不到 1 分钟前"
+        if age < 3600:
+            return f"{max(1, round(age / 60))} 分钟前"
+        if age < 86400:
+            return f"{max(1, round(age / 3600))} 小时前"
+        return f"{max(1, round(age / 86400))} 天前"
 
     def _rounded_rectangle(self, x1, y1, x2, y2, radius, **kwargs):
         points = [
@@ -568,21 +731,26 @@ class UsageOverlay:
             self._drag_origin = None
             return
         self._drag_origin = (event.x_root, event.y_root, self.root.winfo_x(), self.root.winfo_y())
+        self._drag_moved = False
 
     def _drag(self, event) -> None:
         if self._drag_origin is None:
             return
         mouse_x, mouse_y, window_x, window_y = self._drag_origin
+        if abs(event.x_root - mouse_x) > 3 or abs(event.y_root - mouse_y) > 3:
+            self._drag_moved = True
         x = window_x + event.x_root - mouse_x
         y = window_y + event.y_root - mouse_y
         self.root.geometry(f"+{x}+{y}")
 
     def _end_drag(self, _event) -> None:
-        if self._drag_origin is not None:
+        if self._drag_origin is not None and self._drag_moved:
             if self._pet_window is not None and self._follow_base is not None:
                 self.settings.follow_offset_x = self.root.winfo_x() - self._follow_base[0]
                 self.settings.follow_offset_y = self.root.winfo_y() - self._follow_base[1]
             self._save_position()
+        elif self._drag_origin is not None:
+            self._toggle_smart_lock()
         self._drag_origin = None
 
     def _save_position(self) -> None:
@@ -613,81 +781,135 @@ class UsageOverlay:
         ttk.Label(frame, text="当前宠物").grid(row=0, column=0, sticky="w", pady=4)
         ttk.Label(frame, text=f"{self._pet_name}（自动识别）").grid(row=0, column=1, sticky="w", pady=4)
 
-        labels = {
+        interface_labels = {
+            "smart": "智能（悬停展开）",
+            "compact": "始终极简",
+            "expanded": "始终展开",
+        }
+        reverse_interface_labels = {label: mode for mode, label in interface_labels.items()}
+        interface_var = tk.StringVar(
+            value=interface_labels.get(self.settings.interface_mode, interface_labels["smart"])
+        )
+        ttk.Label(frame, text="界面形态").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Combobox(
+            frame,
+            textvariable=interface_var,
+            values=list(interface_labels.values()),
+            state="readonly",
+            width=18,
+        ).grid(row=1, column=1, sticky="ew", pady=4)
+
+        size_labels = {
             "auto": "自动（推荐）",
             "small": "小（85%）",
             "medium": "中（100%）",
             "large": "大（115%）",
             "custom": "自定义",
         }
-        reverse_labels = {label: mode for mode, label in labels.items()}
-        size_var = tk.StringVar(value=labels.get(self.settings.size_mode, labels["auto"]))
-        ttk.Label(frame, text="浮窗尺寸").grid(row=1, column=0, sticky="w", pady=4)
+        reverse_size_labels = {label: mode for mode, label in size_labels.items()}
+        size_var = tk.StringVar(value=size_labels.get(self.settings.size_mode, size_labels["auto"]))
+        ttk.Label(frame, text="浮窗尺寸").grid(row=2, column=0, sticky="w", pady=4)
         size_box = ttk.Combobox(
             frame,
             textvariable=size_var,
-            values=list(labels.values()),
+            values=list(size_labels.values()),
             state="readonly",
             width=18,
         )
-        size_box.grid(row=1, column=1, sticky="ew", pady=4)
+        size_box.grid(row=2, column=1, sticky="ew", pady=4)
 
         custom_var = tk.IntVar(value=round(self.settings.size_adjust * 100))
-        ttk.Label(frame, text="自定义比例").grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Label(frame, text="自定义比例").grid(row=3, column=0, sticky="w", pady=4)
         custom_spin = tk.Spinbox(frame, from_=70, to=150, textvariable=custom_var, width=8)
-        custom_spin.grid(row=2, column=1, sticky="w", pady=4)
-        ttk.Label(frame, text="%（仅自定义模式生效）").grid(row=2, column=1, sticky="e", pady=4)
+        custom_spin.grid(row=3, column=1, sticky="w", pady=4)
+        ttk.Label(frame, text="%（仅自定义模式生效）").grid(row=3, column=1, sticky="e", pady=4)
 
         refresh_var = tk.IntVar(value=self.settings.refresh_seconds)
-        ttk.Label(frame, text="刷新间隔").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Label(frame, text="刷新间隔").grid(row=4, column=0, sticky="w", pady=4)
         tk.Spinbox(frame, from_=30, to=900, increment=30, textvariable=refresh_var, width=8).grid(
-            row=3, column=1, sticky="w", pady=4
-        )
-        ttk.Label(frame, text="秒").grid(row=3, column=1, sticky="e", pady=4)
-
-        warning_var = tk.IntVar(value=self.settings.warning_threshold)
-        ttk.Label(frame, text="低额度提醒").grid(row=4, column=0, sticky="w", pady=4)
-        tk.Spinbox(frame, from_=1, to=50, textvariable=warning_var, width=8).grid(
             row=4, column=1, sticky="w", pady=4
         )
-        ttk.Label(frame, text="%").grid(row=4, column=1, sticky="e", pady=4)
+        ttk.Label(frame, text="秒").grid(row=4, column=1, sticky="e", pady=4)
+
+        warning_var = tk.IntVar(value=self.settings.warning_threshold)
+        ttk.Label(frame, text="红色阈值").grid(row=5, column=0, sticky="w", pady=4)
+        tk.Spinbox(frame, from_=1, to=50, textvariable=warning_var, width=8).grid(
+            row=5, column=1, sticky="w", pady=4
+        )
+        ttk.Label(frame, text="%").grid(row=5, column=1, sticky="e", pady=4)
+
+        amber_var = tk.IntVar(value=self.settings.amber_threshold)
+        ttk.Label(frame, text="黄色阈值").grid(row=6, column=0, sticky="w", pady=4)
+        tk.Spinbox(frame, from_=10, to=90, textvariable=amber_var, width=8).grid(
+            row=6, column=1, sticky="w", pady=4
+        )
+        ttk.Label(frame, text="%").grid(row=6, column=1, sticky="e", pady=4)
+
+        collapse_var = tk.IntVar(value=self.settings.collapse_seconds)
+        ttk.Label(frame, text="离开后收起").grid(row=7, column=0, sticky="w", pady=4)
+        tk.Spinbox(frame, from_=1, to=30, textvariable=collapse_var, width=8).grid(
+            row=7, column=1, sticky="w", pady=4
+        )
+        ttk.Label(frame, text="秒").grid(row=7, column=1, sticky="e", pady=4)
 
         topmost_var = tk.BooleanVar(value=self.settings.always_on_top)
         startup_var = tk.BooleanVar(value=is_startup_enabled())
+        insight_var = tk.BooleanVar(value=self.settings.show_insights)
+        history_var = tk.BooleanVar(value=self.settings.history_enabled)
+        ttk.Checkbutton(frame, text="显示本地趋势建议", variable=insight_var).grid(
+            row=8, column=0, columnspan=2, sticky="w", pady=(8, 2)
+        )
+        ttk.Checkbutton(frame, text="在本机保存额度历史", variable=history_var).grid(
+            row=9, column=0, columnspan=2, sticky="w", pady=2
+        )
         ttk.Checkbutton(frame, text="保持置顶", variable=topmost_var).grid(
-            row=5, column=0, columnspan=2, sticky="w", pady=(8, 2)
+            row=10, column=0, columnspan=2, sticky="w", pady=2
         )
         ttk.Checkbutton(frame, text="登录 Windows 后自动启动", variable=startup_var).grid(
-            row=6, column=0, columnspan=2, sticky="w", pady=2
+            row=11, column=0, columnspan=2, sticky="w", pady=2
         )
 
         button_row = ttk.Frame(frame)
-        button_row.grid(row=7, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        button_row.grid(row=12, column=0, columnspan=2, sticky="e", pady=(12, 0))
         ttk.Button(button_row, text="取消", command=lambda: self._close_settings_window(dialog)).pack(
             side="right", padx=(8, 0)
         )
 
         def apply_and_close() -> None:
-            mode = reverse_labels.get(size_var.get(), "auto")
+            size_mode = reverse_size_labels.get(size_var.get(), "auto")
+            interface_mode = reverse_interface_labels.get(interface_var.get(), "smart")
             try:
                 custom_adjust = max(70, min(150, int(custom_var.get()))) / 100
                 refresh_seconds = max(30, min(900, int(refresh_var.get())))
                 warning_threshold = max(1, min(50, int(warning_var.get())))
+                amber_threshold = max(10, min(90, int(amber_var.get())))
+                collapse_seconds = max(1, min(30, int(collapse_var.get())))
+                if amber_threshold <= warning_threshold:
+                    raise ValueError("黄色阈值必须高于红色阈值。")
                 set_startup(bool(startup_var.get()))
             except (OSError, ValueError) as exc:
                 messagebox.showerror("无法保存设置", str(exc), parent=dialog)
                 return
 
-            self.settings.size_mode = mode
+            self.settings.size_mode = size_mode
             self.settings.size_adjust = custom_adjust
+            self.settings.interface_mode = interface_mode
+            self.settings.collapse_seconds = collapse_seconds
             self.settings.refresh_seconds = refresh_seconds
             self.settings.warning_threshold = warning_threshold
+            self.settings.amber_threshold = amber_threshold
+            self.settings.show_insights = bool(insight_var.get())
+            self.settings.history_enabled = bool(history_var.get())
             self.settings.always_on_top = bool(topmost_var.get())
             self.settings.start_with_windows = bool(startup_var.get())
             self.settings.save()
             self._topmost_var.set(self.settings.always_on_top)
             self.root.attributes("-topmost", self.settings.always_on_top)
             self._service.set_refresh_seconds(refresh_seconds)
+            self._service.set_history_enabled(self.settings.history_enabled)
+            self._cancel_collapse()
+            self._expanded = interface_mode == "expanded"
+            self._expanded_locked = interface_mode == "expanded"
             self._apply_display_scale(self._display_dpi, force=True)
             self._close_settings_window(dialog)
 

@@ -39,10 +39,11 @@ class OverlayRecoveryTests(unittest.TestCase):
 
     def test_two_rows_have_additional_vertical_spacing(self) -> None:
         self.assertEqual(UsageOverlay._row_step(1), 34)
-        self.assertEqual(UsageOverlay._row_step(2), 40)
+        self.assertEqual(UsageOverlay._row_step(2), 38)
 
     def test_percentage_uses_same_color_as_progress_bar(self) -> None:
         overlay = UsageOverlay.__new__(UsageOverlay)
+        overlay.settings = Settings()
         overlay.canvas = mock.Mock()
         overlay._font = mock.Mock(return_value=("font",))
         overlay._rounded_rectangle = mock.Mock()
@@ -61,6 +62,29 @@ class OverlayRecoveryTests(unittest.TestCase):
                 self.assertTrue(
                     any(call.kwargs.get("fill") == expected for call in overlay._rounded_rectangle.call_args_list)
                 )
+
+    def test_compact_reset_text_is_short(self) -> None:
+        self.assertEqual(UsageOverlay._compact_reset_text("6 天 23 小时后重置"), "6天23时")
+        self.assertEqual(UsageOverlay._compact_reset_text("1 小时 24 分钟后重置"), "1时24分")
+
+    def test_interface_mode_controls_compact_state(self) -> None:
+        overlay = UsageOverlay.__new__(UsageOverlay)
+        overlay._expanded = False
+        overlay.settings = Settings(interface_mode="smart")
+        self.assertTrue(overlay._should_compact())
+        overlay._expanded = True
+        self.assertFalse(overlay._should_compact())
+        overlay.settings.interface_mode = "compact"
+        self.assertTrue(overlay._should_compact())
+        overlay.settings.interface_mode = "expanded"
+        self.assertFalse(overlay._should_compact())
+
+    def test_configured_thresholds_drive_all_usage_colors(self) -> None:
+        overlay = UsageOverlay.__new__(UsageOverlay)
+        overlay.settings = Settings(warning_threshold=15, amber_threshold=45)
+        self.assertEqual(overlay._remaining_color(10), UsageOverlay.CORAL)
+        self.assertEqual(overlay._remaining_color(30), UsageOverlay.AMBER)
+        self.assertEqual(overlay._remaining_color(70), UsageOverlay.GREEN)
 
     def test_reference_and_low_dpi_sizes_are_consistent(self) -> None:
         overlay = UsageOverlay.__new__(UsageOverlay)

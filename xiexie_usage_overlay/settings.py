@@ -9,6 +9,7 @@ from pathlib import Path
 CURRENT_LAYOUT_VERSION = 4
 SIZE_MODES = {"auto", "small", "medium", "large", "custom"}
 SIZE_MULTIPLIERS = {"auto": 1.0, "small": 0.85, "medium": 1.0, "large": 1.15}
+INTERFACE_MODES = {"smart", "compact", "expanded"}
 
 
 def app_data_dir() -> Path:
@@ -59,6 +60,10 @@ def _size_mode(value) -> str:
     return value if isinstance(value, str) and value in SIZE_MODES else "auto"
 
 
+def _interface_mode(value) -> str:
+    return value if isinstance(value, str) and value in INTERFACE_MODES else "smart"
+
+
 @dataclass
 class Settings:
     x: int | None = None
@@ -66,8 +71,13 @@ class Settings:
     refresh_seconds: int = 60
     always_on_top: bool = True
     warning_threshold: int = 20
+    amber_threshold: int = 50
     size_mode: str = "auto"
     size_adjust: float = 1.0
+    interface_mode: str = "smart"
+    collapse_seconds: int = 4
+    show_insights: bool = True
+    history_enabled: bool = True
     start_with_windows: bool = False
     follow_offset_x: int = 0
     follow_offset_y: int = 0
@@ -86,14 +96,23 @@ class Settings:
         stored_layout_version = _bounded_int(
             data.get("layout_version", 1), 1, 1, CURRENT_LAYOUT_VERSION
         )
+        warning_threshold = _bounded_int(data.get("warning_threshold", 20), 20, 1, 50)
+        amber_threshold = _bounded_int(data.get("amber_threshold", 50), 50, 10, 90)
+        if amber_threshold <= warning_threshold:
+            amber_threshold = min(90, warning_threshold + 10)
         settings = cls(
             x=_optional_int(data.get("x")),
             y=_optional_int(data.get("y")),
             refresh_seconds=_bounded_int(data.get("refresh_seconds", 60), 60, 30, 900),
             always_on_top=_boolean(data.get("always_on_top", True), True),
-            warning_threshold=_bounded_int(data.get("warning_threshold", 20), 20, 1, 50),
+            warning_threshold=warning_threshold,
+            amber_threshold=amber_threshold,
             size_mode=_size_mode(data.get("size_mode", "auto")),
             size_adjust=_bounded_float(data.get("size_adjust", 1.0), 1.0, 0.7, 1.5),
+            interface_mode=_interface_mode(data.get("interface_mode", "smart")),
+            collapse_seconds=_bounded_int(data.get("collapse_seconds", 4), 4, 1, 30),
+            show_insights=_boolean(data.get("show_insights", True), True),
+            history_enabled=_boolean(data.get("history_enabled", True), True),
             start_with_windows=_boolean(data.get("start_with_windows", False), False),
             follow_offset_x=_bounded_int(data.get("follow_offset_x", 0), 0, -20_000, 20_000),
             follow_offset_y=_bounded_int(data.get("follow_offset_y", 0), 0, -20_000, 20_000),

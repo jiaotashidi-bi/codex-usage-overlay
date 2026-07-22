@@ -34,6 +34,24 @@ class RateWindowTests(unittest.TestCase):
 
 
 class UsageSnapshotTests(unittest.TestCase):
+    def test_safe_snapshot_round_trip(self) -> None:
+        now = int(time.time())
+        original = UsageSnapshot.from_response(
+            {
+                "rateLimits": {
+                    "planType": "plus",
+                    "primary": {"usedPercent": 58, "windowDurationMins": 10080, "resetsAt": now + 3600},
+                    "secondary": {"usedPercent": 18, "windowDurationMins": 300, "resetsAt": now + 900},
+                    "credits": {"hasCredits": True, "balance": "12"},
+                }
+            }
+        )
+
+        restored = UsageSnapshot.from_safe_dict(original.to_safe_dict())
+
+        self.assertEqual(restored.plan_type, "PLUS")
+        self.assertEqual([row.window.remaining_percent for row in restored.display_rows()], [42, 82])
+        self.assertEqual(restored.credits.balance if restored.credits else None, "12")
     def test_parses_current_camel_case_response(self) -> None:
         snapshot = UsageSnapshot.from_response(
             {

@@ -19,16 +19,22 @@ class _UnexpectedFailureClient:
 
 class UsageServiceRecoveryTests(unittest.TestCase):
     def test_refresh_interval_can_be_updated_live(self) -> None:
-        service = UsageService(lambda _event: None)
+        store = mock.Mock()
+        service = UsageService(lambda _event: None, store=store)
 
         service.set_refresh_seconds(5)
 
         self.assertEqual(service.refresh_seconds, 30)
         self.assertTrue(service._refresh.is_set())
 
+        service.set_history_enabled(False)
+        store.set_history_enabled.assert_called_once_with(False)
+
     def test_unexpected_failure_is_reported_instead_of_killing_thread(self) -> None:
         events = []
-        service = UsageService(events.append)
+        store = mock.Mock()
+        store.load_cached_snapshot.return_value = None
+        service = UsageService(events.append, store=store)
 
         with (
             mock.patch(

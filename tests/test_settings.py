@@ -39,8 +39,13 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.refresh_seconds, 60)
         self.assertTrue(settings.always_on_top)
         self.assertEqual(settings.warning_threshold, 20)
+        self.assertEqual(settings.amber_threshold, 50)
         self.assertEqual(settings.size_mode, "auto")
         self.assertEqual(settings.size_adjust, 1.0)
+        self.assertEqual(settings.interface_mode, "smart")
+        self.assertEqual(settings.collapse_seconds, 4)
+        self.assertTrue(settings.show_insights)
+        self.assertTrue(settings.history_enabled)
         self.assertFalse(settings.start_with_windows)
         self.assertEqual(settings.follow_offset_x, 12)
         self.assertEqual(settings.follow_offset_y, 0)
@@ -49,7 +54,15 @@ class SettingsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "settings.json").write_text(
-                json.dumps({"refresh_seconds": 1, "warning_threshold": 100, "size_adjust": 99}),
+                json.dumps(
+                    {
+                        "refresh_seconds": 1,
+                        "warning_threshold": 100,
+                        "amber_threshold": 10,
+                        "size_adjust": 99,
+                        "collapse_seconds": 99,
+                    }
+                ),
                 encoding="utf-8",
             )
             with mock.patch("xiexie_usage_overlay.settings.app_data_dir", return_value=root):
@@ -57,7 +70,9 @@ class SettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.refresh_seconds, 30)
         self.assertEqual(settings.warning_threshold, 50)
+        self.assertEqual(settings.amber_threshold, 60)
         self.assertEqual(settings.size_adjust, 1.5)
+        self.assertEqual(settings.collapse_seconds, 30)
 
     def test_old_layout_offsets_are_reset_for_left_side_layout(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
