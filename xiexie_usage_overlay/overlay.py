@@ -587,15 +587,24 @@ class UsageOverlay:
             personality = f"只剩 {minimum}%，省着点。"
         else:
             personality = "额度正常，我盯着。"
+        if not has_two_rows:
+            self.canvas.create_line(
+                12,
+                y - 3,
+                self.WIDTH - 22,
+                y - 3,
+                fill=self.BODY_BORDER,
+            )
+        guidance_text = personality if has_two_rows else self._balanced_guidance_text(personality)
         self.canvas.create_text(
             12,
             y - 3 if has_two_rows else y + 1,
             anchor="nw",
-            text=compact_display_name(personality, max_columns=64),
+            text=compact_display_name(guidance_text, max_columns=64),
             width=(self.WIDTH - 34) * self._scale_x,
             justify="left",
             fill=self.CORAL if self._connection_error else status_color,
-            font=self._font("Microsoft YaHei UI", 7, "bold"),
+            font=self._font("Microsoft YaHei UI", 7 if has_two_rows else 6, "bold"),
         )
         # Reserve room for an optional credits line in the 250 px layout.
         y += 24 if has_two_rows else 38
@@ -618,11 +627,20 @@ class UsageOverlay:
             return 250
         if row_count >= 2:
             return 230
-        return 170
+        return 180
 
     @staticmethod
     def _row_step(row_count: int) -> int:
         return 38 if row_count >= 2 else 34
+
+    @staticmethod
+    def _balanced_guidance_text(message: str) -> str:
+        """Prefer a semantic two-line break over Tk's mid-duration wrapping."""
+
+        head, separator, tail = message.partition("，")
+        if separator and tail:
+            return f"{head}{separator}\n{tail.lstrip()}"
+        return message
 
     def _draw_limit_row(self, y: int, label: str, remaining: int, reset_text: str) -> None:
         color = self._remaining_color(remaining)

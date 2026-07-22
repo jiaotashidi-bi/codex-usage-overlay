@@ -33,13 +33,21 @@ class OverlayRecoveryTests(unittest.TestCase):
         self.assertIn("codex.cmd login", message)
 
     def test_snapshot_height_grows_for_two_rows_and_credits(self) -> None:
-        self.assertEqual(UsageOverlay._snapshot_pixel_height(1, False), 170)
+        self.assertEqual(UsageOverlay._snapshot_pixel_height(1, False), 180)
         self.assertEqual(UsageOverlay._snapshot_pixel_height(2, False), 230)
         self.assertEqual(UsageOverlay._snapshot_pixel_height(2, True), 250)
 
     def test_two_rows_have_additional_vertical_spacing(self) -> None:
         self.assertEqual(UsageOverlay._row_step(1), 34)
         self.assertEqual(UsageOverlay._row_step(2), 38)
+
+    def test_single_row_guidance_breaks_at_semantic_pause(self) -> None:
+        message = "照这个速度，约 14 小时 58 分后会见底。"
+
+        self.assertEqual(
+            UsageOverlay._balanced_guidance_text(message),
+            "照这个速度，\n约 14 小时 58 分后会见底。",
+        )
 
     def test_percentage_uses_same_color_as_progress_bar(self) -> None:
         overlay = UsageOverlay.__new__(UsageOverlay)
