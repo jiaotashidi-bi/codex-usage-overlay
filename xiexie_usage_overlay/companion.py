@@ -20,7 +20,6 @@ class UsageInsight:
     tone: InsightTone = "unknown"
     rate_per_hour: float | None = None
     hours_to_empty: float | None = None
-    short_message: str | None = None
 
 
 def _parse_datetime(value: object) -> datetime | None:
@@ -44,19 +43,6 @@ def _duration_text(hours: float) -> str:
     days = minutes // (24 * 60)
     hours_left = (minutes % (24 * 60)) // 60
     return f"{days} 天 {hours_left} 小时" if hours_left else f"{days} 天"
-
-
-def _compact_duration_text(hours: float) -> str:
-    minutes = max(1, round(hours * 60))
-    if minutes < 60:
-        return f"{minutes}分"
-    if minutes < 24 * 60:
-        whole_hours = minutes // 60
-        remainder = minutes % 60
-        return f"{whole_hours}时{remainder}分" if remainder else f"{whole_hours}时"
-    days = minutes // (24 * 60)
-    hours_left = (minutes % (24 * 60)) // 60
-    return f"{days}天{hours_left}时" if hours_left else f"{days}天"
 
 
 class CompanionStore:
@@ -112,11 +98,7 @@ class CompanionStore:
             history = list(samples) if samples is not None else self._load_samples()
         minimum = snapshot.minimum_remaining
         if minimum is None:
-            return UsageInsight(
-                "还没有可分析的百分比，我继续盯着。",
-                "unknown",
-                short_message="暂无趋势数据",
-            )
+            return UsageInsight("还没有可分析的百分比，我继续盯着。", "unknown")
 
         current_at = snapshot.received_at
         current_rows = snapshot.display_rows(limit=20)
@@ -148,30 +130,12 @@ class CompanionStore:
         active = [item for item in candidates if item[0] > 0]
         if not active:
             if candidates:
-                return UsageInsight(
-                    "最近额度变化不大，稳得住。",
-                    "normal",
-                    0.0,
-                    None,
-                    "额度变化不大",
-                )
+                return UsageInsight("最近额度变化不大，稳得住。", "normal", 0.0, None)
             if minimum <= 10:
-                return UsageInsight(
-                    f"只剩 {minimum}%，别硬撑。",
-                    "critical",
-                    short_message=f"只剩{minimum}%，别硬撑",
-                )
+                return UsageInsight(f"只剩 {minimum}%，别硬撑。", "critical")
             if minimum <= 20:
-                return UsageInsight(
-                    f"只剩 {minimum}%，我建议省着点。",
-                    "warning",
-                    short_message=f"只剩{minimum}%，省着点",
-                )
-            return UsageInsight(
-                "趋势样本还不够，我先替你记着。",
-                "unknown",
-                short_message="趋势样本积累中",
-            )
+                return UsageInsight(f"只剩 {minimum}%，我建议省着点。", "warning")
+            return UsageInsight("趋势样本还不够，我先替你记着。", "unknown")
 
         now_ts = current_at.timestamp()
         def urgency(item: tuple[float, float, int | None]) -> float:
@@ -187,7 +151,6 @@ class CompanionStore:
                 "critical",
                 rate,
                 hours_to_empty,
-                f"约{_compact_duration_text(hours_to_empty)}后见底",
             )
         if hours_to_reset and hours_to_empty < hours_to_reset * 0.9:
             lead = max(0.0, hours_to_reset - hours_to_empty)
@@ -196,14 +159,12 @@ class CompanionStore:
                 "warning",
                 rate,
                 hours_to_empty,
-                f"将早{_compact_duration_text(lead)}用完",
             )
         return UsageInsight(
             f"最近约每小时消耗 {rate:.1f}%，目前节奏还稳。",
             "normal",
             rate,
             hours_to_empty,
-            f"约{rate:.1f}%/时，节奏稳",
         )
 
     def _load_samples(self) -> list[dict[str, Any]]:

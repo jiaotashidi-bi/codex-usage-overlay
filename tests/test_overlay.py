@@ -3,7 +3,6 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from xiexie_usage_overlay.companion import UsageInsight
 from xiexie_usage_overlay.overlay import UsageOverlay
 from xiexie_usage_overlay.pet_identity import PetIdentity
 from xiexie_usage_overlay.settings import Settings
@@ -41,22 +40,6 @@ class OverlayRecoveryTests(unittest.TestCase):
     def test_two_rows_have_additional_vertical_spacing(self) -> None:
         self.assertEqual(UsageOverlay._row_step(1), 34)
         self.assertEqual(UsageOverlay._row_step(2), 38)
-
-    def test_single_row_uses_complete_short_insight(self) -> None:
-        insight = UsageInsight(
-            "照这个速度，约 1 小时 12 分后会见底。",
-            "critical",
-            short_message="约1时12分后见底",
-        )
-
-        self.assertEqual(UsageOverlay._insight_message(insight, 1), "约1时12分后见底")
-        self.assertEqual(UsageOverlay._insight_message(insight, 2), insight.message)
-
-    def test_compact_age_text_fits_single_row_status(self) -> None:
-        snapshot = mock.Mock()
-        snapshot.age_seconds.return_value = 6 * 60
-
-        self.assertEqual(UsageOverlay._compact_age_text(snapshot), "6分前")
 
     def test_percentage_uses_same_color_as_progress_bar(self) -> None:
         overlay = UsageOverlay.__new__(UsageOverlay)
