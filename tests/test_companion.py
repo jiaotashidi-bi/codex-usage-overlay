@@ -54,6 +54,7 @@ class CompanionStoreTests(unittest.TestCase):
         self.assertEqual(insight.tone, "critical")
         self.assertAlmostEqual(insight.rate_per_hour or 0, 20.0)
         self.assertIn("见底", insight.message)
+        self.assertEqual(insight.short_message, "约3时30分后见底")
 
     def test_slow_consumption_is_reported_as_stable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -67,6 +68,7 @@ class CompanionStoreTests(unittest.TestCase):
 
         self.assertEqual(insight.tone, "normal")
         self.assertIn("节奏还稳", insight.message)
+        self.assertEqual(insight.short_message, "约2.0%/时，节奏稳")
 
     def test_history_can_be_disabled_without_disabling_cache(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

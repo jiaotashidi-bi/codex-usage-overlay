@@ -572,12 +572,21 @@ class UsageOverlay:
             )
             y += 34
 
+        has_two_rows = len(rows) >= 2
         if self._connection_error:
-            personality = f"离线 · {self._age_text(snapshot)}更新，正在重连。"
+            personality = (
+                f"离线 · {self._age_text(snapshot)}更新，正在重连。"
+                if has_two_rows
+                else f"离线·{self._compact_age_text(snapshot)}"
+            )
         elif self._data_source == "cache" or is_stale:
-            personality = f"先显示{self._age_text(snapshot)}的数据，我在重连。"
+            personality = (
+                f"先显示{self._age_text(snapshot)}的数据，我在重连。"
+                if has_two_rows
+                else f"上次数据·{self._compact_age_text(snapshot)}"
+            )
         elif self.settings.show_insights and self._insight is not None:
-            personality = self._insight.message
+            personality = self._insight_message(self._insight, len(rows))
         elif minimum is None:
             personality = "暂无百分比，我继续盯着。"
         elif minimum <= 10:
@@ -586,12 +595,11 @@ class UsageOverlay:
             personality = f"只剩 {minimum}%，省着点。"
         else:
             personality = "额度正常，我盯着。"
-        has_two_rows = len(rows) >= 2
         self.canvas.create_text(
             12,
             y - (3 if has_two_rows else 0),
             anchor="nw" if has_two_rows else "w",
-            text=compact_display_name(personality, max_columns=36 if has_two_rows else 18),
+            text=compact_display_name(personality, max_columns=36 if has_two_rows else 20),
             width=(self.WIDTH - 34) * self._scale_x if has_two_rows else 0,
             justify="left",
             fill=self.CORAL if self._connection_error else status_color,
@@ -623,6 +631,12 @@ class UsageOverlay:
     @staticmethod
     def _row_step(row_count: int) -> int:
         return 38 if row_count >= 2 else 34
+
+    @staticmethod
+    def _insight_message(insight: UsageInsight, row_count: int) -> str:
+        if row_count < 2 and insight.short_message:
+            return insight.short_message
+        return insight.message
 
     def _draw_limit_row(self, y: int, label: str, remaining: int, reset_text: str) -> None:
         color = self._remaining_color(remaining)
@@ -691,6 +705,17 @@ class UsageOverlay:
         if age < 86400:
             return f"{max(1, round(age / 3600))} 小时前"
         return f"{max(1, round(age / 86400))} 天前"
+
+    @staticmethod
+    def _compact_age_text(snapshot: UsageSnapshot) -> str:
+        age = snapshot.age_seconds()
+        if age < 60:
+            return "刚刚"
+        if age < 3600:
+            return f"{max(1, round(age / 60))}分前"
+        if age < 86400:
+            return f"{max(1, round(age / 3600))}时前"
+        return f"{max(1, round(age / 86400))}天前"
 
     def _rounded_rectangle(self, x1, y1, x2, y2, radius, **kwargs):
         points = [
